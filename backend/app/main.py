@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.ai_core import create_ai_core
 from app.api.errors import http_exception_handler
 from app.api.router import api_router
 from app.core.config import get_settings
@@ -20,6 +21,10 @@ def create_app() -> FastAPI:
 
     # Error envelope per docs/07_API_Design.md §10.
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+
+    # Shared AI service layer (docs/09_Migration_Analysis.md §3.3).
+    # Domains reach it via the get_ai_core dependency.
+    app.state.ai_core = create_ai_core()
 
     app.add_middleware(
         CORSMiddleware,
