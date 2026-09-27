@@ -14,10 +14,14 @@ in `docs/07_API_Design.md`.
   Framework is an internal tool and is intentionally excluded from the
   public catalogue. No hosted deployment URL is verified for any
   product, so no launch URLs are advertised.
+- `resume_ats/` — Resume ATS domain (first migration target,
+  `docs/09_Migration_Analysis.md` §5 Phase 2). Currently contains the
+  deterministic keyword/scoring engine (ported per §3.2 KEEP: keyword
+  sets, matching, score cleaning, analysis fields). Routers, the AI
+  workflow, prompts, and database models land in later slices.
 
 ## Future domains
 
-- Resume ATS
 - IT Support Copilot
 - AI Testing / Evaluation (future integration point)
 - Career Coach
