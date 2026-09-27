@@ -5,7 +5,17 @@ live here as its own domain module, following the domain contract
 defined in `docs/09_Migration_Analysis.md` (§3.3) and the API standards
 in `docs/07_API_Design.md`.
 
-No domains exist yet. Future modules include:
+## Existing domains
+
+- `assistants/` — platform assistant catalogue (seed of the domain
+  registry): static registry + `GET /api/v1/assistants`. Exposes the
+  two public assistants (ATS Resume Assistant, AI IT Support Copilot)
+  with their verified repository as a reference link. The AI Testing
+  Framework is an internal tool and is intentionally excluded from the
+  public catalogue. No hosted deployment URL is verified for any
+  product, so no launch URLs are advertised.
+
+## Future domains
 
 - Resume ATS
 - IT Support Copilot
