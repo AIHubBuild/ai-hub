@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
     cors_origins: list[str] = ["http://localhost:3000"]
+    log_level: str = "INFO"
+
+    # Supabase (Authentication + PostgreSQL + Storage) — introduced in
+    # Phase 1. All fields are optional: local development works without
+    # a Supabase project; protected endpoints simply cannot validate
+    # tokens until `supabase_jwt_secret` is configured.
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_jwt_secret: str = ""
 
 
 @lru_cache
