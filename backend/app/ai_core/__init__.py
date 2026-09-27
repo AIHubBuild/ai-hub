@@ -30,6 +30,7 @@ from app.ai_core.run_records import (
     RunRecordStore,
     RunStatus,
 )
+from app.ai_core.run_records_db import SQLAlchemyRunRecordStore
 from app.ai_core.workflows import (
     RunResult,
     Workflow,
@@ -52,6 +53,7 @@ __all__ = [
     "RunRecordStore",
     "RunResult",
     "RunStatus",
+    "SQLAlchemyRunRecordStore",
     "Workflow",
     "WorkflowNotFoundError",
     "WorkflowRunner",

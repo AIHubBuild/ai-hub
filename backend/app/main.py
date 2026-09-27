@@ -3,14 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.ai_core import create_ai_core
+from app.ai_core.run_records_db import SQLAlchemyRunRecordStore
 from app.api.errors import http_exception_handler
 from app.api.router import api_router
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
+from app.db.session import create_engine_from_settings, create_session_factory
 
 
-def create_app() -> FastAPI:
-    settings = get_settings()
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or get_settings()
     configure_logging(settings)
 
     app = FastAPI(
@@ -22,9 +24,17 @@ def create_app() -> FastAPI:
     # Error envelope per docs/07_API_Design.md §10.
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 
+    # Database foundation (docs/05_Database_Design.md, docs/09 §4).
+    engine = create_engine_from_settings(settings)
+    session_factory = create_session_factory(engine)
+    app.state.engine = engine
+    app.state.session_factory = session_factory
+
     # Shared AI service layer (docs/09_Migration_Analysis.md §3.3).
-    # Domains reach it via the get_ai_core dependency.
-    app.state.ai_core = create_ai_core()
+    # Run records are persisted from day one via the DB-backed store.
+    app.state.ai_core = create_ai_core(
+        run_store=SQLAlchemyRunRecordStore(session_factory)
+    )
 
     app.add_middleware(
         CORSMiddleware,

@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000"]
     log_level: str = "INFO"
 
+    # Database (docs/05_Database_Design.md: PostgreSQL via Supabase).
+    # Local development defaults to a gitignored SQLite file; staging and
+    # production set DATABASE_URL to the Supabase PostgreSQL connection.
+    database_url: str = "sqlite:///./aihub_dev.db"
+
     # Supabase (Authentication + PostgreSQL + Storage) — introduced in
     # Phase 1. All fields are optional: local development works without
     # a Supabase project; protected endpoints simply cannot validate
