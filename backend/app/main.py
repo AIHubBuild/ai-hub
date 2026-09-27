@@ -9,6 +9,7 @@ from app.api.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine_from_settings, create_session_factory
+from app.domains.resume_ats.prompts import register_prompts
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -32,9 +33,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Shared AI service layer (docs/09_Migration_Analysis.md §3.3).
     # Run records are persisted from day one via the DB-backed store.
-    app.state.ai_core = create_ai_core(
-        run_store=SQLAlchemyRunRecordStore(session_factory)
-    )
+    ai_core = create_ai_core(run_store=SQLAlchemyRunRecordStore(session_factory))
+    register_prompts(ai_core.prompts)
+    app.state.ai_core = ai_core
 
     app.add_middleware(
         CORSMiddleware,

@@ -174,3 +174,16 @@ def generate_ats_analysis(keyword_results: KeywordMatchResult) -> AtsAnalysis:
         matching_keywords=keyword_results.matched,
         missing_keywords=keyword_results.missing,
     )
+
+
+def run_deterministic_analysis(
+    resume_text: str, job_description: str
+) -> AtsAnalysis:
+    """Run the deterministic half of the ATS analysis.
+
+    Composes keyword matching and analysis shaping — mirroring the
+    first step of the legacy pipeline. This is the single entry point
+    the future LangGraph workflow calls before the AI nodes run.
+    """
+    keyword_results = calculate_keyword_match(resume_text, job_description)
+    return generate_ats_analysis(keyword_results)
