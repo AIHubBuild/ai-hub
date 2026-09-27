@@ -18,10 +18,10 @@ in `docs/07_API_Design.md`.
   `docs/09_Migration_Analysis.md` §5 Phase 2). Contains the
   deterministic keyword/scoring engine (ported per §3.2 KEEP), the
   six-section workflow contracts (`AtsAnalysisRequest` /
-  `AtsAnalysisResult`), and the three versioned prompt assets for the
-  approved analysis → tailored resume → cover letter workflow.
-  Routers, the LangGraph workflow, and database models land in later
-  slices.
+  `AtsAnalysisResult`), the three versioned prompt assets, and the
+  LangGraph workflow (`workflow.py`: deterministic analysis → AI
+  recommendations → tailored resume → cover letter). The FastAPI
+  routers and database models land in later slices.
 
 ## Future domains
 
