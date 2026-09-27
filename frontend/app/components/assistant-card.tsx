@@ -1,26 +1,14 @@
+import Link from "next/link";
 import type { AssistantCatalogueEntry } from "../lib/catalogue";
-
-const STATUS_STYLES: Record<AssistantCatalogueEntry["status"], {
-  badge: string;
-  label: string;
-}> = {
-  available: {
-    badge:
-      "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400",
-    label: "Ready for integration",
-  },
-  in_development: {
-    badge: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400",
-    label: "In development",
-  },
-};
+import { CapabilityTags } from "./capability-tags";
+import { ExternalLinkIcon } from "./icons";
+import { StatusBadge } from "./status-badge";
 
 export function AssistantCard({
   assistant,
 }: {
   assistant: AssistantCatalogueEntry;
 }) {
-  const status = STATUS_STYLES[assistant.status];
   const deployed = assistant.launch_url !== null;
 
   return (
@@ -29,30 +17,17 @@ export function AssistantCard({
         <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-50">
           {assistant.name}
         </h3>
-        <span
-          className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${status.badge}`}
-        >
-          {status.label}
-        </span>
+        <StatusBadge status={assistant.status} />
       </div>
       <p className="mb-4 flex-1 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
         {assistant.description}
       </p>
-      {assistant.capabilities.length > 0 && (
-        <ul
-          className="mb-5 flex flex-wrap gap-1.5"
-          aria-label={`${assistant.name} capabilities`}
-        >
-          {assistant.capabilities.map((capability) => (
-            <li
-              key={capability}
-              className="rounded-md bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-            >
-              {capability}
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="mb-5">
+        <CapabilityTags
+          capabilities={assistant.capabilities}
+          label={`${assistant.name} capabilities`}
+        />
+      </div>
       <div className="mt-auto flex items-center justify-between gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-800">
         {deployed ? (
           <a
@@ -70,32 +45,26 @@ export function AssistantCard({
             Not yet integrated
           </span>
         )}
-        <a
-          href={assistant.repository_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`${assistant.name} repository (opens in a new tab)`}
-          className="inline-flex items-center gap-1 text-sm text-zinc-500 underline-offset-2 hover:text-zinc-800 hover:underline focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 dark:text-zinc-400 dark:hover:text-zinc-200"
-        >
-          Repository
-          <ExternalLinkIcon />
-        </a>
+        <span className="flex items-center gap-3">
+          <Link
+            href={`/assistants/${assistant.id}`}
+            aria-label={`View ${assistant.name} details`}
+            className="inline-flex items-center text-sm font-medium text-zinc-700 underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 dark:text-zinc-200"
+          >
+            Details
+          </Link>
+          <a
+            href={assistant.repository_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`${assistant.name} repository (opens in a new tab)`}
+            className="inline-flex items-center gap-1 text-sm text-zinc-500 underline-offset-2 hover:text-zinc-800 hover:underline focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 dark:text-zinc-400 dark:hover:text-zinc-200"
+          >
+            Repository
+            <ExternalLinkIcon />
+          </a>
+        </span>
       </div>
     </article>
-  );
-}
-
-export function ExternalLinkIcon() {
-  return (
-    <svg
-      className="ml-1 h-3.5 w-3.5"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      aria-hidden="true"
-    >
-      <path d="M6.5 3H3v10h10V9.5M9.5 3H13v3.5M13 3 7 9" />
-    </svg>
   );
 }

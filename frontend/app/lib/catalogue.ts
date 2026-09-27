@@ -28,3 +28,10 @@ export async function fetchCatalogue(): Promise<AssistantCatalogueEntry[]> {
   const body = (await response.json()) as AssistantCatalogueResponse;
   return body.data;
 }
+
+export async function fetchAssistantById(
+  assistantId: string,
+): Promise<AssistantCatalogueEntry | null> {
+  const catalogue = await fetchCatalogue();
+  return catalogue.find((assistant) => assistant.id === assistantId) ?? null;
+}
