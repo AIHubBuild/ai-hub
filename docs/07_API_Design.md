@@ -35,13 +35,14 @@
 18. Interview APIs *(Part 3)*
 19. AI Conversation APIs *(Part 3)*
 20. Notification APIs *(Part 3)*
-21. API Security *(Part 3)*
-22. Rate Limiting *(Part 3)*
-23. OpenAPI Documentation *(Part 3)*
-24. Future APIs *(Part 3)*
-25. Related Documents *(Part 3)*
-26. Revision History *(Part 3)*
-27. Conclusion *(Part 3)*
+21. Assistant Catalogue APIs *(Part 3)*
+22. API Security *(Part 3)*
+23. Rate Limiting *(Part 3)*
+24. OpenAPI Documentation *(Part 3)*
+25. Future APIs *(Part 3)*
+26. Related Documents *(Part 3)*
+27. Revision History *(Part 3)*
+28. Conclusion *(Part 3)*
 
 ---
 
@@ -1420,7 +1421,61 @@ DELETE /api/v1/notifications/{notificationId}
 
 ---
 
-# 21. API Security
+# 21. Assistant Catalogue APIs
+
+The Assistant Catalogue module exposes the platform assistant registry — the list of AI applications available on AI Hub. It is the seed of the pluggable domain registry described in `09_Migration_Analysis.md` (§3.3).
+
+---
+
+## 21.1 Get Assistant Catalogue
+
+```http
+GET /api/v1/assistants
+```
+
+### Authentication
+
+Not Required
+
+### Description
+
+Returns all assistants currently registered on the platform.
+
+### Success Response (200)
+
+```json
+{
+    "success": true,
+    "message": "Assistant catalogue retrieved",
+    "data": [
+        {
+            "id": "resume-ats",
+            "name": "ATS Resume Assistant",
+            "description": "Analyzes a resume against a job description...",
+            "status": "available",
+            "capabilities": [
+                "ATS resume analysis",
+                "Keyword matching",
+                "Tailored cover letter",
+                "DOCX export"
+            ],
+            "launch_url": null,
+            "repository_url": "https://github.com/akinselureabiola/ATS-Resume-Assistant"
+        }
+    ]
+}
+```
+
+### Field Notes
+
+- `status`: `available` (ready for integration) or `in_development`.
+- `launch_url`: `null` until a verified hosted deployment exists. A launch URL may only be advertised once a real deployment is verified.
+- `repository_url`: reference link only — never presented as a launch destination.
+- The AI Testing Framework is an internal QA/developer tool and is intentionally excluded from the public catalogue (see `09_Migration_Analysis.md` §3.4).
+
+---
+
+# 22. API Security
 
 Security is enforced across every API endpoint to protect user data and ensure platform integrity.
 
@@ -1492,7 +1547,7 @@ Recommended HTTP security headers include:
 
 ---
 
-# 22. Rate Limiting
+# 23. Rate Limiting
 
 Rate limiting protects the platform from abuse and denial-of-service attacks.
 
@@ -1524,7 +1579,7 @@ Rate limiting protects the platform from abuse and denial-of-service attacks.
 
 ---
 
-# 23. OpenAPI Documentation
+# 24. OpenAPI Documentation
 
 The AI Hub Platform API will follow the OpenAPI 3.1 specification.
 
@@ -1553,7 +1608,7 @@ The OpenAPI specification enables:
 
 ---
 
-# 24. Future APIs
+# 25. Future APIs
 
 Future platform releases may introduce additional APIs.
 
@@ -1604,7 +1659,7 @@ Potential modules include:
 
 ---
 
-# 25. Related Documents
+# 26. Related Documents
 
 This document should be read together with:
 
@@ -1622,15 +1677,16 @@ Together, these documents define the product, architecture, infrastructure, data
 
 ---
 
-# 26. Revision History
+# 27. Revision History
 
 | Version | Date | Author | Description |
 |----------|------|--------|-------------|
+| 1.1 | September 2026 | Abiola Akinselure | Added Assistant Catalogue APIs (GET /api/v1/assistants); renumbered sections 21–27 |
 | 1.0 | July 2026 | Abiola Akinselure | Initial API Design document |
 
 ---
 
-# 27. Conclusion
+# 28. Conclusion
 
 The AI Hub Platform API has been designed as a secure, scalable, and maintainable RESTful interface that enables seamless communication between the frontend application, backend services, AI capabilities, and supporting cloud infrastructure.
 

@@ -7,9 +7,13 @@ designed to host multiple AI assistants — Resume ATS, IT Support Copilot,
 Career Coach, Interview Coach, Job Matching, and future AI agents — as
 pluggable modules on one shared foundation.
 
-> Status: **Platform foundation.** The repository currently contains the
-> Next.js + FastAPI scaffold only. No assistants, authentication, database,
-> or AI integrations have been built yet.
+> Status: **Platform foundation + assistant catalogue.** The Next.js +
+> FastAPI scaffold is in place, and the first domain — the platform
+> assistant catalogue — is implemented end-to-end: a FastAPI domain
+> (`GET /api/v1/assistants`), a Next.js dashboard with assistant cards,
+> and per-assistant detail pages, covered by backend tests.
+> Authentication, database, resume, job, and AI integrations have not
+> been built yet.
 
 The detailed product and technical blueprint lives in [`docs/`](docs/) —
 those documents are the primary source of truth for the platform.
@@ -49,12 +53,18 @@ new assistant must not require restructuring the platform
 ```text
 AI-Hub-New/
 ├── frontend/        # Next.js application
+│   └── app/
+│       ├── page.tsx           # dashboard (assistant catalogue)
+│       ├── assistants/        # per-assistant detail routes
+│       ├── components/        # shared UI components
+│       └── lib/               # API client helpers
 ├── backend/         # FastAPI application
 │   └── app/
 │       ├── main.py          # app factory + health check
 │       ├── core/            # configuration
 │       ├── api/             # routing structure (api/v1)
-│       └── domains/         # future assistant modules (empty for now)
+│       └── domains/         # pluggable assistant domains
+│           └── assistants/  # assistant catalogue (first domain)
 ├── docs/            # product & architecture documentation (source of truth)
 ├── .env.example     # environment variable template (no real secrets)
 ├── .gitignore
@@ -94,6 +104,15 @@ uvicorn app.main:app --reload --port 8000
 - Health check: http://localhost:8000/health
 - Versioned health: http://localhost:8000/api/v1/health
 - OpenAPI docs: http://localhost:8000/docs
+
+### Backend Tests
+
+```bash
+cd backend
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+pytest
+```
 
 ### Frontend (Next.js)
 

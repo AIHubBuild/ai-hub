@@ -504,7 +504,7 @@ Notes:
 Preserving working functionality is the priority: the Streamlit apps remain untouched and runnable while AI Hub is built beside them (strangler approach). Parity checks compare FastAPI output against the Streamlit apps before frontend wiring.
 
 **Phase 0 — Decisions & Setup**
-1. Resolve open INVESTIGATE items: authoritative ATS pipeline variant; canonical IT support categories; docxtpl vs python-docx; ticket ID scheme; KB storage (files vs DB).
+1. Resolve open INVESTIGATE items: authoritative ATS pipeline variant; canonical IT support categories; docxtpl vs python-docx; ticket ID scheme; KB storage (files vs DB). *(Resolved/closed September 2026 — see §8 Decision Log.)*
 2. Define the **domain contract** (§3.3) and `ai_core` interfaces (LLM client factory, prompt registry, workflow runner, run-record schema) — validated against the two migrated apps, not invented in the abstract.
 3. Scaffold monorepo: `frontend/` (Next.js + TS + Tailwind), `backend/` (FastAPI with domain registry + auto-mount), CI skeleton, env management, Supabase project, Alembic baseline.
 4. Rotate credentials exposed in the old repos; never copy `users.yaml`/`auth_config.yaml`/`create_user.py` into AI Hub.
@@ -555,11 +555,66 @@ Preserving working functionality is the priority: the Streamlit apps remain unto
 
 # 7. Open Questions (INVESTIGATE)
 
-1. Which ATS implementation is authoritative — `streamlit_app.py` single-call or `ats_engine.py` multi-call pipeline? They produce different outputs.
+1. Which ATS implementation is authoritative — `streamlit_app.py` single-call or `ats_engine.py` multi-call pipeline? They produce different outputs. *(RESOLVED — §8.1)*
 2. Are `auth.py`, `history_manager.py`, `feedback_manager.py`, `usage_tracker.py` part of an uncommitted "full" ATS app variant that should also be preserved?
-3. Canonical IT support category list (classifier vs knowledge loader mismatch).
-4. DOCX strategy: programmatic `python-docx` vs `docxtpl` templates (templates exist but unused).
-5. Whether the IT Support Copilot belongs in the AI Hub MVP at all (docs 01–08 do not mention it) — recommended yes, as a `support` domain.
-6. Whether the knowledge base should migrate to DB rows or stay as versioned text assets.
+3. Canonical IT support category list (classifier vs knowledge loader mismatch). *(PARKED — Support Copilot out of MVP; revisit when the support domain enters scope.)*
+4. DOCX strategy: programmatic `python-docx` vs `docxtpl` templates (templates exist but unused). *(RESOLVED — §8.3)*
+5. Whether the IT Support Copilot belongs in the AI Hub MVP at all (docs 01–08 do not mention it) — recommended yes, as a `support` domain. *(RESOLVED — §8.2)*
+6. Whether the knowledge base should migrate to DB rows or stay as versioned text assets. *(PARKED — §8.4)*
 7. Minimal domain-contract granularity (schemas, router mount convention, workflow registration) — to be settled in Phase 0 against the two real domains.
 8. Run-record schema boundaries — which fields are product history vs evaluation substrate; to be designed in Phase 1 and revisited when the evaluation framework integration begins (not before).
+
+# 8. Phase 0 Decision Log
+
+Recorded September 2026. The following Phase 0 INVESTIGATE items (§7) were
+resolved by the project owner. Terminology is preserved from §7.
+
+## 8.1 ATS Pipeline (Q1) — RESOLVED
+
+- The ATS pipeline is a **LangGraph multi-step workflow**:
+  analysis → tailored resume → cover letter.
+- The deterministic keyword engine (`STOPWORDS`, `TECH_KEYWORDS`,
+  `extract_keywords`, `calculate_keyword_match`) remains part of the ATS
+  logic (consistent with the KEEP classification in §3.2).
+- The **six-section analysis output** (ATS score, matching keywords,
+  missing keywords, improvement suggestions, tailored resume, cover
+  letter) remains the authoritative structured analysis baseline.
+- The legacy `===marker===` parsing approach is **not** carried into AI
+  Hub; structured output is required (consistent with §2.1.17.5).
+
+## 8.2 IT Support Copilot (Q2) — RESOLVED: OUT OF MVP
+
+- The IT Support Copilot is **not part of the AI Hub MVP**. The
+  `support` domain, ticketing system, knowledge-base infrastructure, and
+  Copilot AI workflows are not built during the MVP.
+- The existing assistant catalogue entry remains informational only.
+- The Copilot becomes the **first post-MVP domain** unless the product
+  documents are explicitly changed later.
+- Consequence: when the support domain later enters scope, docs 04/05/07
+  must be updated to cover it (per the §4 note).
+
+## 8.3 DOCX Strategy (Q3) — RESOLVED
+
+- DOCX generation uses **python-docx** (programmatic; docxtpl set aside).
+- Reusable document-generation logic from the legacy ATS application is
+  ported where appropriate, per the REFACTOR classification in §3.2
+  (heuristics cleaned; no Streamlit-specific code; return bytes).
+- Generated document bytes follow the documented storage approach:
+  **Supabase Storage** (see `06_AWS_Cloud_Architecture.md` §7.5), with
+  canonical text content stored in the database
+  (`05_Database_Design.md`: `RESUME_VERSIONS.optimized_content`,
+  `COVER_LETTERS.content`).
+
+## 8.4 Knowledge Base Storage (Q4) — PARKED
+
+- Not implemented during the MVP (Support Copilot out of MVP).
+- No knowledge-base file structure, database tables, vector/RAG
+  infrastructure, or related APIs are created now.
+- Revisit when the support domain enters scope.
+
+## 8.5 Ticket ID Scheme (Q5) — PARKED
+
+- Not implemented during the MVP (Support Copilot out of MVP).
+- When the support domain enters scope, ticket IDs follow the existing
+  UUID primary-key convention from `05_Database_Design.md` (§4.2, §9);
+  deterministic DB-generated IDs only — never `random.randint`.
