@@ -81,6 +81,36 @@ def test_escalation_keywords_escalate_ticket():
     )
 
 
+def test_error_code_containing_critical_does_not_escalate():
+    """CRITICAL_PROCESS_DIED is diagnostic data, not an escalation request."""
+    message = (
+        "The blue screen shows the error code CRITICAL_PROCESS_DIED "
+        "after a Windows update."
+    )
+    assert apply_ticket_status(STATUS_IN_PROGRESS, message) == STATUS_IN_PROGRESS
+
+
+def test_standalone_critical_word_does_escalate():
+    assert (
+        apply_ticket_status(STATUS_IN_PROGRESS, "this is critical")
+        == STATUS_ESCALATED
+    )
+
+
+def test_escalated_ticket_cannot_regress():
+    assert (
+        apply_ticket_status(STATUS_ESCALATED, "it works now")
+        == STATUS_ESCALATED
+    )
+
+
+def test_resolved_ticket_cannot_regress():
+    assert (
+        apply_ticket_status(STATUS_RESOLVED, "urgent new issue")
+        == STATUS_RESOLVED
+    )
+
+
 def test_status_unchanged_without_keywords():
     assert (
         apply_ticket_status(STATUS_IN_PROGRESS, "hello there")

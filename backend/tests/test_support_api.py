@@ -85,10 +85,8 @@ def client(tmp_path):
             "Restart your VPN client and try again.",
             # Follow-up message: troubleshoot only.
             "Check the VPN gateway status.",
-            # "It works" message: troubleshoot.
-            "That should resolve it.",
-            # Confirmation message: troubleshoot, then root cause.
-            "Please verify one more time.",
+            # Confirmation message: root-cause summary only (the
+            # "fixed" report turn makes no AI call).
             "Issue Type: vpn_issue\nLikely Cause: configuration drift",
         ]
     )
@@ -216,6 +214,8 @@ def test_ticket_resolution_generates_root_cause(client):
 
     data = response.json()["data"]
     assert data["ticket"]["status"] == "Awaiting Confirmation"
+    assert "Awaiting Confirmation" in data["response"]
+    assert "Troubleshooting Response" not in data["response"]
 
     response = send_message(test_client, session_id, "Confirmed, everything works now")
 
@@ -298,6 +298,100 @@ def test_security_issue_escalates_on_first_message(tmp_path):
     assert data["ticket"]["priority"] == "High"
     assert data["ticket"]["assigned_team"] == "Security Operations"
     assert "Escalated to IT Support Team" in data["response"]
+
+
+def test_blue_screen_follow_up_is_context_aware(tmp_path):
+    """Regression: follow-ups must not repeat the classification, must
+    keep the same ticket, and must not escalate on CRITICAL_PROCESS_DIED."""
+    provider = FakeProvider(
+        responses=[
+            # First message: classify + troubleshoot.
+            "hardware_issue",
+            "Note the stop code and check what changed recently.",
+            # Follow-up: troubleshoot only.
+            "1. Check recent Windows update history. 2. Can you reach "
+            "Windows Recovery Environment, and are your files backed up?",
+        ]
+    )
+    app = build_app(tmp_path, make_settings(tmp_path), provider)
+    with TestClient(app) as test_client:
+        session_id = create_session(test_client).json()["data"]["session_id"]
+
+        first = send_message(
+            test_client, session_id, "My laptop is displaying a blue screen."
+        )
+        assert first.status_code == 201
+        first_data = first.json()["data"]
+        assert first_data["issue_type"] == "hardware_issue"
+        assert first_data["ticket"]["assigned_team"] == "Hardware Support"
+        assert first_data["ticket"]["status"] == "Open"
+        first_ticket_id = first_data["ticket"]["ticket_id"]
+
+        follow_up = send_message(
+            test_client,
+            session_id,
+            "The blue screen started after a Windows update yesterday. "
+            "The error code is CRITICAL_PROCESS_DIED. What should I check "
+            "next?",
+        )
+
+    assert follow_up.status_code == 201
+    data = follow_up.json()["data"]
+    # Same ticket identity, no accidental escalation from the stop code.
+    assert data["ticket"]["ticket_id"] == first_ticket_id
+    assert data["ticket"]["status"] == "In Progress"
+    assert data["ticket"]["assigned_team"] == "Hardware Support"
+    # Context-aware troubleshooting, no repeated classification section.
+    assert "### Issue Classification" not in data["response"]
+    assert "update history" in data["response"]
+    assert "Windows Recovery Environment" in data["response"]
+    # Escalation messaging is consistent with the actual ticket state.
+    assert "No escalation required" in data["response"]
+    assert "Escalated to IT Support Team" not in data["response"]
+
+
+def test_escalation_keyword_marks_ticket_escalated_consistently(tmp_path):
+    """A real escalation phrase must produce one consistent state."""
+    provider = FakeProvider(
+        responses=[
+            "vpn_issue",
+            "Restart your VPN client.",
+            "Check the VPN gateway status.",
+        ]
+    )
+    app = build_app(tmp_path, make_settings(tmp_path), provider)
+    with TestClient(app) as test_client:
+        session_id = create_session(test_client).json()["data"]["session_id"]
+        send_message(test_client, session_id, "Cannot connect to the VPN")
+
+        response = send_message(
+            test_client,
+            session_id,
+            "This is urgent, it is a critical outage affecting everyone.",
+        )
+
+    assert response.status_code == 201
+    data = response.json()["data"]
+    assert data["ticket"]["status"] == "Escalated"
+    assert "Escalated to IT Support Team" in data["response"]
+    assert "No escalation required" not in data["response"]
+    assert "has been escalated to" in data["response"]
+
+
+def test_follow_up_response_omits_classification_and_ticket_is_preserved(client):
+    """Regression: ticket ID must be stable across messages."""
+    test_client, _ = client
+    session_id = create_session(test_client).json()["data"]["session_id"]
+    first = send_message(test_client, session_id, "Cannot connect to the VPN").json()[
+        "data"
+    ]
+    second = send_message(
+        test_client, session_id, "I still cannot connect"
+    ).json()["data"]
+
+    assert second["ticket"]["ticket_id"] == first["ticket"]["ticket_id"]
+    assert "### Issue Classification" not in second["response"]
+    assert first["response"].count("### Issue Classification") == 1
 
 
 # ---------------------------------------------------------------

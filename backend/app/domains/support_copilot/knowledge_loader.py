@@ -4,13 +4,16 @@ Ported from the standalone Copilot's `utils/knowledge_loader.py`
 (KEEP, `docs/09_Migration_Analysis.md` §3.2). The issue-type → file
 mapping and the general fallback are preserved exactly.
 
-Category mapping (documented, preserved from the legacy code):
+Category mapping (documented, preserved from the legacy code, plus
+additions):
 - The classifier emits: password_reset, vpn_issue, network_issue,
   hardware_issue, access_issue, security_issue.
 - Dedicated knowledge files exist for: vpn_issue, password_reset,
-  email_issue, printer_issue, m365_issue, active_directory_issue.
-- Everything else — including network_issue, hardware_issue,
-  access_issue, and security_issue — falls back to general_support.txt.
+  email_issue, printer_issue, m365_issue, active_directory_issue,
+  hardware_issue (blue-screen diagnostics), and network_issue
+  (connectivity diagnostics) — both added with the AI Hub integration.
+- Everything else — including access_issue and security_issue — falls
+  back to general_support.txt.
 """
 
 from importlib.resources import files
@@ -22,6 +25,8 @@ KNOWLEDGE_FILES = {
     "printer_issue": "printer_support.txt",
     "m365_issue": "m365_support.txt",
     "active_directory_issue": "active_directory.txt",
+    "hardware_issue": "hardware_support.txt",
+    "network_issue": "network_support.txt",
     "general": "general_support.txt",
 }
 

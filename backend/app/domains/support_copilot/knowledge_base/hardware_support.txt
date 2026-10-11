@@ -1,0 +1,59 @@
+Blue Screen (BSOD) Troubleshooting Guide
+
+This guide covers generic Windows blue-screen diagnostics. Treat any
+stop code as diagnostic data, never as an escalation instruction.
+
+LOW-RISK CHECKS (start here)
+
+1. Note the stop code and any driver or file named on the blue screen
+   (for example CRITICAL_PROCESS_DIED, DRIVER_IRQL_NOT_LESS_OR_EQUAL).
+   The stop code narrows which subsystem failed.
+
+2. Check whether anything changed recently: Windows updates, driver
+   updates, new hardware, or newly installed software. A blue screen
+   that starts right after an update often points to that update or an
+   incompatible driver.
+
+3. Reboot and confirm whether the blue screen returns immediately or
+   only under specific conditions. The timing is diagnostic evidence.
+
+4. Run Windows Update and install pending driver updates from the
+   device manufacturer. Out-of-date graphics, storage, or chipset
+   drivers are a common cause.
+
+5. In an elevated Command Prompt run "sfc /scannow" and, if it reports
+   unrepaired corruption, "DISM /Online /Cleanup-Image /RestoreHealth".
+   These repair system files without touching user data.
+
+NEXT-LEVEL CHECKS (higher risk — explain prerequisites first)
+
+6. Review recent update history (Settings > Windows Update > Update
+   history) and note which updates installed just before the problem
+   started. Uninstalling a suspect update requires admin access and is
+   best done after confirming the timeline and backing up important
+   files.
+
+7. If Windows does not start normally, use Windows Recovery
+   Environment: restart while holding Shift, or boot from Windows
+   installation media. Safe Mode, Startup Repair, and System Restore
+   are available there. Startup Repair does not remove user files;
+   System Restore reverts system state to a restore point and should
+   only be used with a recent restore point available.
+
+8. Check disk health with "chkdsk /f" (from an elevated prompt; may
+   require a reboot). A failing disk can cause repeated blue screens.
+
+DATA SAFETY
+
+- Before uninstalling updates, resetting Windows, or reinstalling,
+   confirm important files are backed up (external drive or cloud).
+- "Reset this PC" or a clean reinstall is a last resort after the
+   checks above; it can remove installed applications and requires
+   backups.
+
+ESCALATION
+
+- If the blue screen persists after the low-risk checks, or the system
+   no longer starts and recovery options are unavailable, escalate
+   through the support ticket so a specialist can inspect the dump
+   files and hardware.

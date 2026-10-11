@@ -77,8 +77,43 @@ def test_retrieve_knowledge_maps_vpn_issue_to_vpn_guide():
     assert "VPN" in output["knowledge_base"]
 
 
-def test_retrieve_knowledge_unknown_category_falls_back_to_general():
+def test_retrieve_knowledge_maps_hardware_issue_to_blue_screen_guide():
+    output = retrieve_knowledge({"issue_type": "hardware_issue"})
+
+    assert "Blue Screen" in output["knowledge_base"]
+    assert "CRITICAL_PROCESS_DIED" in output["knowledge_base"]
+
+
+def test_retrieve_knowledge_maps_network_issue_to_connectivity_guide():
     output = retrieve_knowledge({"issue_type": "network_issue"})
+
+    content = output["knowledge_base"]
+    assert "LAPTOP-SPECIFIC CHECKS" in content
+    assert "no internet access" in content
+    assert "Intermittent connectivity" in content
+
+
+def test_network_guide_prefers_safe_steps_and_safeguards():
+    content = retrieve_knowledge({"issue_type": "network_issue"})["knowledge_base"]
+
+    assert "Do NOT casually disable the firewall or antivirus" in content
+    assert "re-enable it immediately" in content
+    assert "single short test" in content
+    assert "SAFE, REVERSIBLE STEPS" in content
+
+
+def test_troubleshoot_latest_prompt_has_security_safety_rules():
+    from app.domains.support_copilot.prompts import TROUBLESHOOT_TEMPLATE_V3
+
+    template = TROUBLESHOOT_TEMPLATE_V3.user_template
+
+    assert "Never casually instruct the user to disable a firewall" in template
+    assert "re-enable protection immediately" in template
+    assert "Prefer safe, reversible steps" in template
+
+
+def test_retrieve_knowledge_unknown_category_falls_back_to_general():
+    output = retrieve_knowledge({"issue_type": "access_issue"})
 
     assert output["knowledge_base"] == load_knowledge("general")
 
@@ -101,9 +136,18 @@ def test_ask_questions_vpn_branch():
     assert "VPN error" in output["follow_up_question"]
 
 
-def test_ask_questions_generic_fallback():
+def test_ask_questions_network_branch_distinguishes_paths():
     output = ask_questions({"issue_type": "network_issue"})
 
+    assert "Wi-Fi network at all" in output["follow_up_question"]
+    assert "connected but web pages" in output["follow_up_question"]
+
+
+def test_ask_questions_generic_fallback():
+    output = ask_questions({"issue_type": "network_issue"})
+    assert output["follow_up_question"]  # targeted question exists
+
+    output = ask_questions({"issue_type": "hardware_issue"})
     assert output["follow_up_question"] == (
         "Can you provide more details about the issue?"
     )
@@ -128,6 +172,32 @@ def test_troubleshoot_uses_knowledge_base_and_user_message():
     assert "VPN TROUBLESHOOTING GUIDE" in prompt
     assert "VPN error 809" in prompt
     assert "<user_message>" in prompt
+
+
+def test_troubleshoot_uses_latest_prompt_version_with_context_rules():
+    from app.domains.support_copilot.prompts import TROUBLESHOOT_TEMPLATE_V2
+
+    registry = make_registry()
+    assert registry.get("support_copilot/troubleshoot").version == 3
+
+    client = ScriptedClient(["Check the update history first."])
+    node = make_troubleshoot_node(client, registry)
+
+    node(
+        {
+            "knowledge_base": "BLUE SCREEN GUIDE",
+            "conversation_history": "user: blue screen\nassistant: reboot",
+            "issue_type": "hardware_issue",
+            "user_issue": "CRITICAL_PROCESS_DIED after Windows update",
+        }
+    )
+
+    prompt = client.calls[0]["user"]
+    assert "treat the stop code as diagnostic data" in prompt
+    assert "clarifying questions" in prompt
+    assert "Do NOT claim a root cause is confirmed" in prompt
+    assert "CRITICAL_PROCESS_DIED" in prompt
+    assert "Windows Recovery" in prompt
 
 
 def test_escalate_flags_critical_issues():

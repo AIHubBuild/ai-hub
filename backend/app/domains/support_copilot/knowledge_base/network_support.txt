@@ -1,0 +1,61 @@
+Network Connectivity Troubleshooting Guide
+
+Use the user's answers to pick the matching path. Always prefer safe,
+reversible steps and ask before any step that could change settings.
+
+FIRST: IDENTIFY THE SITUATION
+
+1. Cannot connect to the Wi-Fi network at all (no network shown, wrong
+   password, network not found).
+2. Connected to Wi-Fi but no internet access (pages do not load, "No
+   internet" indicator).
+3. Intermittent connectivity (works for a while, then drops).
+4. DNS or website-specific problems (some sites work, others do not).
+
+LAPTOP-SPECIFIC CHECKS (when other devices work normally)
+
+A. Adapter status (Windows): Settings > Network & Internet > Wi-Fi;
+   confirm Wi-Fi is on and airplane mode is off. Restart the adapter:
+   Device Manager > Network adapters > right-click the wireless adapter
+   > Disable, wait a few seconds, then Enable.
+
+B. IP configuration (Windows): open Command Prompt and run "ipconfig
+   /all". A working connection shows an IP address like 192.168.x.x. An
+   address of 169.254.x.x means the laptop did not get an address from
+   the router.
+
+C. Gateway connectivity (Windows): run "ping 192.168.1.1" (or the
+   router address shown as Default Gateway in ipconfig). Replies mean
+   the laptop reaches the router; timeouts point to Wi-Fi or router
+   issues.
+
+D. DNS resolution: run "nslookup example.com". If it resolves, DNS is
+   working. If it fails while "ping 8.8.8.8" succeeds, the problem is
+   DNS-specific; try "ipconfig /flushdns" and note the configured DNS
+   servers.
+
+SAFE, REVERSIBLE STEPS (in order)
+
+1. Reboot the laptop and the router/modem (power off 30 seconds).
+2. Forget and reconnect the Wi-Fi network.
+3. Run Windows network troubleshooting (Settings > Network & Internet >
+   Network troubleshooter).
+4. Update the wireless adapter driver from the laptop or adapter
+   manufacturer — never from unverified sources.
+5. If DNS-specific: flush DNS with "ipconfig /flushdns"; consider
+   switching to a public resolver only if the user understands and
+   accepts the change.
+
+SECURITY SOFTWARE (firewall / antivirus)
+
+Do NOT casually disable the firewall or antivirus. If a security
+product is suspected of blocking connectivity and every other check is
+clean, explain the risk before testing: temporarily disable ONLY for a
+single short test, and re-enable it immediately afterwards. Never leave
+protection disabled.
+
+ESCALATION
+
+If other devices work and the laptop checks above do not restore
+connectivity, or the user is not comfortable running commands,
+escalate through the support ticket.

@@ -1,7 +1,9 @@
 """Follow-up question node.
 
 Ported from the legacy `nodes/ask_questions.py` (KEEP). The per-category
-questions and the generic fallback are preserved exactly.
+questions and the generic fallback are preserved; a targeted question
+was added for network connectivity issues because the answer changes
+the troubleshooting path.
 """
 
 from typing import Any, Callable
@@ -18,6 +20,11 @@ def ask_questions(state: dict) -> dict:
         question = "Are you receiving any VPN error messages?"
     elif issue_type == "email_issue":
         question = "Can you send or receive emails?"
+    elif issue_type == "network_issue":
+        question = (
+            "Are you unable to connect to the Wi-Fi network at all, or is "
+            "the laptop connected but web pages won't load?"
+        )
     else:
         question = "Can you provide more details about the issue?"
 

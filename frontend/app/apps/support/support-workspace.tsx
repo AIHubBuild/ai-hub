@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import ReactMarkdown, { Components } from "react-markdown";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../components/auth/auth-provider";
 import { ApiError } from "../../lib/api";
@@ -15,6 +16,37 @@ import {
 } from "../../lib/support";
 
 type Stage = "start" | "working" | "done";
+
+// Safe Markdown renderer: react-markdown escapes raw HTML by default;
+// we only style the supported element set. No dangerouslySetInnerHTML.
+const MARKDOWN_COMPONENTS: Components = {
+  h3: ({ children }) => (
+    <h3 className="mb-1 mt-4 text-sm font-semibold tracking-wide text-zinc-900 first:mt-0 dark:text-zinc-100">
+      {children}
+    </h3>
+  ),
+  p: ({ children }) => (
+    <p className="my-1.5 leading-relaxed">{children}</p>
+  ),
+  ul: ({ children }) => (
+    <ul className="my-1.5 list-disc space-y-1 pl-5">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="my-1.5 list-decimal space-y-1 pl-5">{children}</ol>
+  ),
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  strong: ({ children }) => (
+    <strong className="font-semibold text-zinc-900 dark:text-zinc-100">
+      {children}
+    </strong>
+  ),
+  em: ({ children }) => <em>{children}</em>,
+  code: ({ children }) => (
+    <code className="rounded bg-zinc-200 px-1 py-0.5 text-[0.85em] dark:bg-zinc-800">
+      {children}
+    </code>
+  ),
+};
 
 export function SupportWorkspace() {
   const { session, loading: authLoading } = useAuth();
@@ -198,13 +230,19 @@ export function SupportWorkspace() {
                   className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
-                    className={`max-w-[85%] whitespace-pre-wrap rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
+                    className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm ${
                       message.role === "user"
-                        ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
+                        ? "whitespace-pre-wrap bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
                         : "border border-zinc-200 bg-zinc-50 text-zinc-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200"
                     }`}
                   >
-                    {message.content}
+                    {message.role === "user" ? (
+                      message.content
+                    ) : (
+                      <ReactMarkdown components={MARKDOWN_COMPONENTS}>
+                        {message.content}
+                      </ReactMarkdown>
+                    )}
                   </div>
                 </div>
               ))}
@@ -232,7 +270,7 @@ export function SupportWorkspace() {
           </div>
         )}
 
-        {sessionId !== null && !resolved && (
+        {sessionId !== null && (
           <form
             onSubmit={handleSend}
             className="flex items-center gap-3 border-t border-zinc-100 px-5 py-3 dark:border-zinc-800"
@@ -241,7 +279,11 @@ export function SupportWorkspace() {
               aria-label="Describe your IT issue"
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Describe your IT issue…"
+              placeholder={
+                resolved
+                  ? "This ticket is resolved — say thanks or start a new session…"
+                  : "Describe your IT issue…"
+              }
               maxLength={4000}
               className="w-full rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-2 focus:outline-offset-2 focus:outline-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-500"
             />

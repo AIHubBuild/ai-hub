@@ -8,6 +8,8 @@ UUIDs, and the user-facing `INC-` id is derived deterministically from
 the UUID (see `service.display_ticket_id`).
 """
 
+import re
+
 # Priority / team mapping — preserved from the legacy implementation.
 TICKET_DEFAULTS = {"priority": "Medium", "assigned_team": "General IT Support"}
 
@@ -39,14 +41,50 @@ RESOLVED_KEYWORDS = [
     "working again",
 ]
 
-ESCALATION_KEYWORDS = [
+# Escalation phrases (substring match) and single words (word-boundary
+# match). Word boundaries prevent false triggers from error codes like
+# CRITICAL_PROCESS_DIED (which contains "critical" but is not an
+# escalation request).
+ESCALATION_PHRASES = [
     "still not working",
-    "urgent",
     "affecting everyone",
-    "critical",
-    "outage",
     "cannot work",
     "business impact",
+]
+
+ESCALATION_WORDS = ["urgent", "critical", "outage"]
+
+# Gratitude / conversational-closure phrases.
+GRATITUDE_KEYWORDS = [
+    "thank you",
+    "thank u",
+    "thanks",
+    "cheers",
+    "appreciate it",
+    "appreciated",
+    "much obliged",
+    "great, thanks",
+]
+
+# Negations that stop a message from being read as a fix report or
+# gratitude ("not fixed", "no thanks, still broken", ...).
+CLOSURE_NEGATIONS = [
+    "not fixed",
+    "isn't fixed",
+    "is not fixed",
+    "haven't fixed",
+    "hasn't fixed",
+    "not resolved",
+    "isn't resolved",
+    "is not resolved",
+    "still broken",
+    "still not working",
+    "not working",
+    "doesn't work",
+    "does not work",
+    "no thanks",
+    "no thank you",
+    "still not fixed",
 ]
 
 # Status values — preserved from the legacy implementation.
@@ -55,6 +93,20 @@ STATUS_IN_PROGRESS = "In Progress"
 STATUS_AWAITING_CONFIRMATION = "Awaiting Confirmation"
 STATUS_RESOLVED = "Resolved"
 STATUS_ESCALATED = "Escalated"
+
+# Terminal states: no keyword may regress a ticket out of them.
+TERMINAL_STATUSES = {STATUS_RESOLVED, STATUS_ESCALATED}
+
+_ESCALATION_WORD_PATTERN = re.compile(
+    r"\b(" + "|".join(re.escape(word) for word in ESCALATION_WORDS) + r")\b"
+)
+
+
+def _has_escalation_keywords(message: str) -> bool:
+    return (
+        any(phrase in message for phrase in ESCALATION_PHRASES)
+        or _ESCALATION_WORD_PATTERN.search(message) is not None
+    )
 
 
 def build_ticket(issue_type: str, escalation_needed: bool) -> dict:
@@ -73,20 +125,29 @@ def build_ticket(issue_type: str, escalation_needed: bool) -> dict:
 def apply_ticket_status(status: str, user_message: str) -> str:
     """Advance the ticket status machine (legacy update_ticket_status).
 
-    Keyword order and semantics are preserved exactly.
+    Keyword order and semantics are preserved, with three corrections:
+    escalation keywords use word boundaries (so error codes like
+    CRITICAL_PROCESS_DIED do not trigger escalation); terminal states
+    (Resolved, Escalated) cannot regress; and negated phrasing
+    ("not fixed", "no thanks, still broken") never counts as closure.
     """
+    if status in TERMINAL_STATUSES:
+        return status
+
     message = user_message.lower()
+    negated = any(marker in message for marker in CLOSURE_NEGATIONS)
 
     if (
-        status == STATUS_AWAITING_CONFIRMATION
+        not negated
+        and status == STATUS_AWAITING_CONFIRMATION
         and any(keyword in message for keyword in CONFIRMATION_KEYWORDS)
     ):
         return STATUS_RESOLVED
 
-    if any(keyword in message for keyword in RESOLVED_KEYWORDS):
+    if not negated and any(keyword in message for keyword in RESOLVED_KEYWORDS):
         return STATUS_AWAITING_CONFIRMATION
 
-    if any(keyword in message for keyword in ESCALATION_KEYWORDS):
+    if _has_escalation_keywords(message):
         return STATUS_ESCALATED
 
     if status == STATUS_OPEN:
