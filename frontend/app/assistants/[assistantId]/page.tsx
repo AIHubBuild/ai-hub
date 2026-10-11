@@ -88,11 +88,21 @@ async function AssistantDetailContent({
           Launch
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-          {assistant.launch_url !== null
-            ? "This assistant has a hosted deployment."
-            : "This assistant is not yet integrated with AI Hub. The launch flow arrives in a later phase — you can review its source in the repository below."}
+          {assistant.app_path !== null
+            ? "This assistant is integrated with AI Hub."
+            : assistant.launch_url !== null
+              ? "This assistant has a hosted deployment."
+              : "This assistant is not yet integrated with AI Hub. The launch flow arrives in a later phase — you can review its source in the repository below."}
         </p>
-        {assistant.launch_url !== null && (
+        {assistant.app_path !== null && (
+          <Link
+            href={assistant.app_path}
+            className="mt-4 inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:focus-visible:outline-zinc-50"
+          >
+            Open in AI Hub
+          </Link>
+        )}
+        {assistant.app_path === null && assistant.launch_url !== null && (
           <a
             href={assistant.launch_url}
             target="_blank"

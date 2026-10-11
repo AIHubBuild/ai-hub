@@ -9,6 +9,7 @@ export function AssistantCard({
 }: {
   assistant: AssistantCatalogueEntry;
 }) {
+  const integrated = assistant.app_path !== null;
   const deployed = assistant.launch_url !== null;
 
   return (
@@ -29,7 +30,14 @@ export function AssistantCard({
         />
       </div>
       <div className="mt-auto flex items-center justify-between gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-        {deployed ? (
+        {integrated ? (
+          <Link
+            href={assistant.app_path ?? "/"}
+            className="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:focus-visible:outline-zinc-50"
+          >
+            Open
+          </Link>
+        ) : deployed ? (
           <a
             href={assistant.launch_url ?? undefined}
             target="_blank"

@@ -13,6 +13,7 @@ class AssistantCatalogueEntry(BaseModel):
     capabilities: list[str]
     launch_url: str | None
     repository_url: str
+    app_path: str | None = None
 
 
 class AssistantCatalogueResponse(BaseModel):

@@ -8,6 +8,7 @@ export interface AssistantCatalogueEntry {
   capabilities: string[];
   launch_url: string | null;
   repository_url: string;
+  app_path: string | null;
 }
 
 export interface AssistantCatalogueResponse {
@@ -16,14 +17,14 @@ export interface AssistantCatalogueResponse {
   data: AssistantCatalogueEntry[];
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { API_URL, errorMessage } from "./api";
 
 export async function fetchCatalogue(): Promise<AssistantCatalogueEntry[]> {
   const response = await fetch(`${API_URL}/api/v1/assistants`, {
     cache: "no-store",
   });
   if (!response.ok) {
-    throw new Error(`Catalogue request failed with status ${response.status}`);
+    throw new Error(await errorMessage(response));
   }
   const body = (await response.json()) as AssistantCatalogueResponse;
   return body.data;

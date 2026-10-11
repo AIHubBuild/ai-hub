@@ -23,8 +23,7 @@ ASSISTANTS: list[AssistantCatalogueEntry] = [
         description=(
             "Analyzes a resume against a job description: ATS scoring, "
             "keyword matching, tailored resume and cover letter "
-            "generation, with DOCX export. Streamlit application — runs "
-            "locally; no hosted deployment verified."
+            "generation, with DOCX export. Integrated with AI Hub."
         ),
         status="available",
         capabilities=[
@@ -35,6 +34,7 @@ ASSISTANTS: list[AssistantCatalogueEntry] = [
         ],
         launch_url=None,
         repository_url="https://github.com/akinselureabiola/ATS-Resume-Assistant",
+        app_path="/apps/resume-ats",
     ),
     AssistantCatalogueEntry(
         id="it-support-copilot",

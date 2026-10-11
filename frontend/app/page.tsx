@@ -14,8 +14,7 @@ export default function Home() {
         </h1>
         <p className="mt-3 text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
           A platform where AI assistants work together. Explore the assistants
-          available on the platform — integration and launch wiring arrive in a
-          later phase.
+          available on the platform.
         </p>
       </section>
 
