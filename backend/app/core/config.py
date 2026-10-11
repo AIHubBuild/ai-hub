@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_anon_key: str = ""
     supabase_jwt_secret: str = ""
+    # Optional override for the Supabase JWKS endpoint. Defaults to
+    # {supabase_url}/auth/v1/.well-known/jwks.json when unset.
+    supabase_jwks_url: str = ""
 
     # OpenAI-compatible AI provider (resume_ats domain).
     # No key is required for the catalogue and health endpoints; the
