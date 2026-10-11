@@ -1,0 +1,18 @@
+Printer Support Guide
+
+Common Issues:
+- Printer offline.
+- Print jobs stuck.
+- Driver issues.
+- Network printing failures.
+
+Troubleshooting:
+- Restart printer.
+- Verify network connectivity.
+- Clear print queue.
+- Reinstall printer driver.
+- Verify default printer settings.
+
+Escalate if:
+- Hardware failure is suspected.
+- Multiple devices cannot print.

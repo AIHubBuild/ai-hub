@@ -2,9 +2,8 @@
 
 Registers the domain's assets with the shared ai_core layer during
 application startup: versioned prompts, the domain model configuration,
-the OpenAI provider client (when a key is configured), and the compiled
-ATS workflow. Called once from `app/main.py` — the domain never talks
-to a provider directly.
+and the compiled ATS workflow. The provider client itself is registered
+once in `app/main.py`; the domain only consumes it through ai_core.
 """
 
 from app.ai_core import (
@@ -13,7 +12,6 @@ from app.ai_core import (
     DomainNotConfiguredError,
     ProviderNotConfiguredError,
 )
-from app.ai_core.providers.openai import OpenAIProvider
 from app.core.config import Settings
 from app.domains.resume_ats.prompts import register_prompts
 from app.domains.resume_ats.workflow import ATS_WORKFLOW_ID, build_ats_workflow
@@ -23,7 +21,7 @@ PROVIDER = "openai"
 
 
 def wire_resume_ats(ai_core: AICore, settings: Settings) -> None:
-    """Register prompts, provider, model config, and workflow."""
+    """Register prompts, model config, and workflow."""
     register_prompts(ai_core.prompts)
 
     ai_core.llm_factory.register_config(
@@ -35,16 +33,6 @@ def wire_resume_ats(ai_core: AICore, settings: Settings) -> None:
             timeout_seconds=int(settings.openai_timeout_seconds),
         )
     )
-
-    if settings.openai_api_key:
-        ai_core.llm_factory.register_provider(
-            PROVIDER,
-            OpenAIProvider(
-                api_key=settings.openai_api_key,
-                base_url=settings.openai_base_url,
-                timeout_seconds=settings.openai_timeout_seconds,
-            ),
-        )
 
     try:
         client = ai_core.llm_factory.get_client(DOMAIN)

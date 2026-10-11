@@ -1,5 +1,5 @@
 import { API_URL, ApiError, errorMessage } from "./api";
-import { getSupabase } from "./supabase";
+import { authHeaders } from "./supabase";
 
 export interface UploadResumeData {
   resume_id: string;
@@ -26,16 +26,6 @@ interface Envelope<T> {
 }
 
 export const SUPPORTED_EXTENSIONS = [".pdf", ".docx", ".txt"] as const;
-
-async function authHeaders(): Promise<Record<string, string>> {
-  const supabase = getSupabase();
-  if (supabase === null) {
-    return {};
-  }
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 async function requireOk<T>(response: Response): Promise<T> {
   if (!response.ok) {

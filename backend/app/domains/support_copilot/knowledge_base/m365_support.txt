@@ -1,0 +1,18 @@
+Microsoft 365 Support Guide
+
+Common Issues:
+- Teams login failures.
+- OneDrive sync issues.
+- SharePoint access problems.
+- License assignment issues.
+
+Troubleshooting:
+- Verify account licensing.
+- Verify internet connectivity.
+- Sign out and sign back in.
+- Clear application cache.
+- Verify service health status.
+
+Escalate if:
+- Service outage is suspected.
+- Tenant-wide issues are reported.

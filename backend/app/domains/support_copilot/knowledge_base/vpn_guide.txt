@@ -1,0 +1,30 @@
+VPN Troubleshooting Guide
+
+Error 809:
+- Verify internet connectivity.
+- Check firewall settings.
+- Verify VPN passthrough is enabled on the router.
+- Verify UDP ports 500 and 4500 are not blocked.
+
+Error 691:
+- Verify username and password.
+- Reset credentials if required.
+- Check account lockout status.
+
+General VPN Checks:
+- Restart VPN client.
+- Reboot device.
+- Verify VPN service status.
+- Test from another network.
+- Check for VPN client updates.
+
+Escalate if:
+- Multiple users are affected.
+- VPN service outage is suspected.
+
+Internal Support Note:
+
+For VPN Error 809, always verify:
+- UDP ports 500 and 4500
+- VPN passthrough
+- Corporate VPN Gateway VPN-BERLIN-01

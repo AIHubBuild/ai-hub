@@ -1,0 +1,18 @@
+Active Directory Support Guide
+
+Common Tasks:
+- Create user accounts.
+- Disable user accounts.
+- Reset passwords.
+- Unlock accounts.
+- Update group memberships.
+- Verify OU placement.
+
+Troubleshooting:
+- Verify replication status.
+- Verify account permissions.
+- Confirm user object exists.
+
+Escalate if:
+- Domain controller issues occur.
+- Replication failures are detected.

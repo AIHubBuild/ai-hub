@@ -1,0 +1,16 @@
+General IT Support Guide
+
+Basic Troubleshooting Steps:
+
+1. Verify internet connectivity.
+2. Restart the application.
+3. Restart the device.
+4. Verify account credentials.
+5. Check for known outages.
+6. Verify software updates.
+7. Review recent changes.
+
+Escalate if:
+- Multiple users are affected.
+- Business operations are impacted.
+- Standard troubleshooting fails.

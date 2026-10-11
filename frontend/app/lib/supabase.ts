@@ -11,3 +11,13 @@ export function getSupabase(): SupabaseClient | null {
   cached = url && anonKey ? createClient(url, anonKey) : null;
   return cached;
 }
+
+export async function authHeaders(): Promise<Record<string, string>> {
+  const supabase = getSupabase();
+  if (supabase === null) {
+    return {};
+  }
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}

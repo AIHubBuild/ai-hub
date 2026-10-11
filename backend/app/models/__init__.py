@@ -15,5 +15,13 @@ class Base(DeclarativeBase):
 
 from app.models.ai_run_record import AIRunRecord  # noqa: E402,F401
 from app.models.resume import AtsAnalysisRecord, Resume  # noqa: E402,F401
+from app.models.support import SupportSession, SupportTicket  # noqa: E402,F401
 
-__all__ = ["Base", "AIRunRecord", "Resume", "AtsAnalysisRecord"]
+__all__ = [
+    "Base",
+    "AIRunRecord",
+    "Resume",
+    "AtsAnalysisRecord",
+    "SupportSession",
+    "SupportTicket",
+]

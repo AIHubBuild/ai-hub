@@ -42,8 +42,8 @@ ASSISTANTS: list[AssistantCatalogueEntry] = [
         description=(
             "Guided IT helpdesk assistant: classifies issues, retrieves "
             "knowledge-base guidance, troubleshoots, and tracks ticket "
-            "lifecycle through resolution or escalation. Streamlit "
-            "application — runs locally; no hosted deployment verified."
+            "lifecycle through resolution or escalation. Integrated with "
+            "AI Hub."
         ),
         status="available",
         capabilities=[
@@ -54,6 +54,7 @@ ASSISTANTS: list[AssistantCatalogueEntry] = [
         ],
         launch_url=None,
         repository_url="https://github.com/akinselureabiola/AI-IT-Support-Copilot",
+        app_path="/apps/support",
     ),
 ]
 

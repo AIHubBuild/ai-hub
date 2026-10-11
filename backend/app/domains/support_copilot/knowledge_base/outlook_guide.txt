@@ -1,0 +1,18 @@
+Outlook Troubleshooting Guide
+
+Common Issues:
+- Outlook not opening.
+- Mail not syncing.
+- Search not working.
+- Profile corruption.
+
+Troubleshooting:
+- Restart Outlook.
+- Run Outlook in Safe Mode.
+- Create a new Outlook profile.
+- Repair Microsoft Office.
+- Verify Exchange connectivity.
+
+Escalate if:
+- Multiple users report the same issue.
+- Exchange service outage is suspected.

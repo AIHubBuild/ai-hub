@@ -8,19 +8,22 @@ Career Coach, Interview Coach, Job Matching, and future AI agents — as
 pluggable modules on one shared foundation.
 
 > Status: **Platform foundation + assistant catalogue + Resume ATS +
-> authentication.**
+> IT Support Copilot + authentication.**
 > The Next.js + FastAPI scaffold is in place. The assistant catalogue is
-> implemented end-to-end, and the first assistant — the ATS Resume
-> Assistant — is integrated: resume upload (PDF/DOCX/TXT, 5 MB limit),
-> ATS analysis via the deterministic keyword engine plus an AI provider
-> (OpenAI-compatible, configured with `OPENAI_API_KEY`), run-record
-> persistence, and tailored-resume DOCX download.
+> implemented end-to-end, and the first two assistants are integrated:
+> - **ATS Resume Assistant** — resume upload (PDF/DOCX/TXT, 5 MB limit),
+>   ATS analysis via the deterministic keyword engine plus an AI provider
+>   (OpenAI-compatible, configured with `OPENAI_API_KEY`), run-record
+>   persistence, and tailored-resume DOCX download.
+> - **AI IT Support Copilot** — issue classification, knowledge-base
+>   troubleshooting, ticket lifecycle, escalation, and root-cause
+>   summaries, with persisted sessions and tickets.
 > Authentication uses Supabase Auth: the backend validates Supabase-issued
-> JWTs on all resume/analysis endpoints and enforces per-user isolation.
+> JWTs on all assistant endpoints and enforces per-user isolation.
 > Requires a Supabase project (`SUPABASE_JWT_SECRET` on the backend,
 > `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` on the
 > frontend). User profiles, Supabase Storage, and the remaining
-> assistants (IT Support Copilot, Career Coach, …) have not been built yet.
+> assistants (Career Coach, …) have not been built yet.
 
 The detailed product and technical blueprint lives in [`docs/`](docs/) —
 those documents are the primary source of truth for the platform.

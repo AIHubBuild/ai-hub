@@ -50,12 +50,12 @@ def test_catalogue_entry_structure():
         assert entry["app_path"] is None or entry["app_path"].startswith("/")
 
 
-def test_integrated_assistant_advertises_its_app_path():
+def test_integrated_assistants_advertise_their_app_path():
     body = client.get("/api/v1/assistants").json()
 
     by_id = {entry["id"]: entry for entry in body["data"]}
     assert by_id["resume-ats"]["app_path"] == "/apps/resume-ats"
-    assert by_id["it-support-copilot"]["app_path"] is None
+    assert by_id["it-support-copilot"]["app_path"] == "/apps/support"
 
 
 def test_no_assistant_has_an_unverified_launch_url():

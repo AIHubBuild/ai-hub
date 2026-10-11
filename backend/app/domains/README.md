@@ -18,14 +18,20 @@ in `docs/07_API_Design.md`.
   `docs/09_Migration_Analysis.md` §5 Phase 2). Contains the
   deterministic keyword/scoring engine (ported per §3.2 KEEP), the
   six-section workflow contracts (`AtsAnalysisRequest` /
-  `AtsAnalysisResult`), the three versioned prompt assets, and the
+  `AtsAnalysisResult`), the three versioned prompt assets, the
   LangGraph workflow (`workflow.py`: deterministic analysis → AI
-  recommendations → tailored resume → cover letter). The FastAPI
-  routers and database models land in later slices.
+  recommendations → tailored resume → cover letter), the upload /
+  analysis / DOCX API, and DB-backed persistence with per-user
+  isolation.
+- `support_copilot/` — IT Support Copilot domain (second migration
+  target, ported per §3.2). Contains the ported LangGraph workflow
+  (classify → route → knowledge retrieval → follow-up → troubleshoot /
+  escalate), the keyword-driven ticket status machine, the seven
+  knowledge-base assets, versioned prompts, persisted sessions and
+  tickets, and authenticated API endpoints with per-user isolation.
 
 ## Future domains
 
-- IT Support Copilot
 - AI Testing / Evaluation (future integration point)
 - Career Coach
 - Interview Coach

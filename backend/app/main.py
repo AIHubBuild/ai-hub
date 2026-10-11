@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.ai_core import create_ai_core
+from app.ai_core.providers.openai import OpenAIProvider
 from app.ai_core.run_records_db import SQLAlchemyRunRecordStore
 from app.api.errors import register_error_handlers
 from app.api.router import api_router
@@ -9,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine_from_settings, create_session_factory
 from app.domains.resume_ats.domain import wire_resume_ats
+from app.domains.support_copilot.domain import wire_support_copilot
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -35,8 +37,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Shared AI service layer (docs/09_Migration_Analysis.md §3.3).
     # Run records are persisted from day one via the DB-backed store.
     ai_core = create_ai_core(run_store=SQLAlchemyRunRecordStore(session_factory))
-    # Resume ATS domain wiring: prompts, provider, model config, workflow.
+    # Provider clients are registered once at the platform level; each
+    # domain only registers its own prompts, model config, and workflows.
+    if settings.openai_api_key:
+        ai_core.llm_factory.register_provider(
+            "openai",
+            OpenAIProvider(
+                api_key=settings.openai_api_key,
+                base_url=settings.openai_base_url,
+                timeout_seconds=settings.openai_timeout_seconds,
+            ),
+        )
     wire_resume_ats(ai_core, settings)
+    wire_support_copilot(ai_core)
     app.state.ai_core = ai_core
 
     app.add_middleware(
