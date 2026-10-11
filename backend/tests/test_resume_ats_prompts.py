@@ -27,8 +27,13 @@ def test_registers_exactly_the_three_workflow_templates():
     registry = make_registered_registry()
 
     assert {t.prompt_id for t in PROMPT_TEMPLATES} == EXPECTED_PROMPT_IDS
+    latest_versions = {
+        "resume_ats/ats_analysis": 2,
+        "resume_ats/tailored_resume": 3,
+        "resume_ats/cover_letter": 3,
+    }
     for prompt_id in EXPECTED_PROMPT_IDS:
-        assert registry.get(prompt_id).version == 1
+        assert registry.get(prompt_id).version == latest_versions[prompt_id]
 
 
 def test_templates_are_versioned_and_retrievable_by_version():
@@ -39,15 +44,26 @@ def test_templates_are_versioned_and_retrievable_by_version():
     assert template == ATS_ANALYSIS_TEMPLATE
 
 
+def test_latest_version_keeps_original_content_and_adds_accuracy_rules():
+    registry = make_registered_registry()
+
+    latest = registry.get("resume_ats/ats_analysis")
+
+    assert latest.version == 2
+    assert ATS_ANALYSIS_TEMPLATE.user_template in latest.user_template
+    assert "{partial_keywords}" in latest.user_template
+    assert "{requirement_evidence}" in latest.user_template
+    assert "never inventing or exaggerating experience" in latest.user_template
+
+
 def test_registering_a_new_version_does_not_replace_the_old():
     registry = make_registered_registry()
     registry.register(
-        ATS_ANALYSIS_TEMPLATE.model_copy(update={"version": 2})
+        ATS_ANALYSIS_TEMPLATE.model_copy(update={"version": 3})
     )
 
-    assert registry.get("resume_ats/ats_analysis") == ATS_ANALYSIS_TEMPLATE.model_copy(
-        update={"version": 2}
-    )
+    assert registry.get("resume_ats/ats_analysis").version == 3
+    assert registry.get("resume_ats/ats_analysis", version=2).version == 2
     assert registry.get("resume_ats/ats_analysis", version=1) == ATS_ANALYSIS_TEMPLATE
 
 
@@ -110,10 +126,48 @@ def test_no_template_uses_legacy_marker_sections():
         assert "===" not in template.user_template
 
 
+def test_tailored_resume_v3_adds_natural_writing_rules():
+    from app.domains.resume_ats.prompts import TAILORED_RESUME_TEMPLATE_V3
+
+    template = TAILORED_RESUME_TEMPLATE_V3.user_template
+
+    assert "NATURAL WRITING RULES" in template
+    assert "Do not use em dashes as a default style" in template
+    assert "second-line support" in template
+    assert "Preserve the applicant's professional voice" in template
+    assert "{style_notes_section}" in template
+    # Version 2 accuracy rules are preserved in version 3.
+    assert "Preserve the exact employers, job titles, and dates" in template
+    assert "Clearly label lab work, coursework, training" in template
+
+
+def test_cover_letter_v3_adds_natural_writing_rules():
+    from app.domains.resume_ats.prompts import COVER_LETTER_TEMPLATE_V3
+
+    template = COVER_LETTER_TEMPLATE_V3.user_template
+
+    assert "NATURAL WRITING RULES" in template
+    assert "contractions" in template
+    assert "Furthermore" in template
+    assert "resonates with me" in template
+    assert "Do not infer personality traits" in template
+    assert "{style_notes_section}" in template
+    assert (
+        "Only reference experience and skills that appear in the optimized "
+        "resume" in template
+    )
+
+
 def test_app_factory_registers_resume_ats_prompts():
     app = create_app()
 
     registry = app.state.ai_core.prompts
 
+    latest_versions = {
+        "resume_ats/ats_analysis": 2,
+        "resume_ats/tailored_resume": 3,
+        "resume_ats/cover_letter": 3,
+    }
     for prompt_id in EXPECTED_PROMPT_IDS:
-        assert registry.get(prompt_id).version == 1
+        assert registry.get(prompt_id).version == latest_versions[prompt_id]
+        assert registry.get(prompt_id, version=1).version == 1

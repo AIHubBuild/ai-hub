@@ -27,8 +27,12 @@ from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
 from app.ai_core.prompts import PromptRegistry
-from app.domains.resume_ats.engine import run_deterministic_analysis
-from app.domains.resume_ats.schemas import AtsAnalysisResult
+from app.domains.resume_ats.job_description import (
+    describe_warning,
+    strip_boilerplate,
+)
+from app.domains.resume_ats.matching import analyze_job_match
+from app.domains.resume_ats.schemas import AtsAnalysisResult, RequirementEvidence
 
 ATS_WORKFLOW_ID = "resume_ats/ats_pipeline"
 
@@ -51,10 +55,18 @@ class AtsWorkflowState(TypedDict, total=False):
 
     resume_text: str
     job_description: str
-    # Deterministic outputs (engine-owned).
+    # Optional applicant-supplied style preferences.
+    style_notes: str | None
+    # Deterministic outputs (matching engine-owned).
+    cleaned_job_description: str
+    job_description_warning: str | None
     match_score: int
+    score_label: str
     matching_keywords: list[str]
+    partial_keywords: list[str]
     missing_keywords: list[str]
+    requirement_evidence: dict[str, dict]
+    score_breakdown: list[dict]
     # AI node outputs.
     improvement_suggestions: str
     tailored_resume: str
@@ -74,14 +86,36 @@ class ChatClient(Protocol):
 
 
 def _deterministic_analysis_node(state: AtsWorkflowState) -> dict:
-    """Run the deterministic engine; sole owner of score and keywords."""
-    analysis = run_deterministic_analysis(
-        state["resume_text"], state["job_description"]
-    )
+    """Clean the job description and run the evidence-based matcher.
+
+    The matcher is the ONLY source of the estimated score and keyword
+    lists; AI nodes read them, never compute them.
+    """
+    cleaned = strip_boilerplate(state["job_description"])
+    analysis = analyze_job_match(state["resume_text"], cleaned)
     return {
-        "match_score": int(analysis.original_ats_score),
-        "matching_keywords": analysis.matching_keywords,
-        "missing_keywords": analysis.missing_keywords,
+        "cleaned_job_description": cleaned,
+        "job_description_warning": describe_warning(
+            state["job_description"], cleaned
+        ),
+        "match_score": analysis.estimated_score,
+        "score_label": analysis.score_label,
+        "matching_keywords": analysis.supported_terms,
+        "partial_keywords": analysis.partial_terms,
+        "missing_keywords": analysis.missing_terms,
+        "requirement_evidence": analysis.evidence_map,
+        "score_breakdown": [
+            {
+                "category": entry.category,
+                "weight": entry.weight,
+                "total": entry.total,
+                "supported": entry.supported,
+                "partial": entry.partial,
+                "missing": entry.missing,
+                "score": entry.score,
+            }
+            for entry in analysis.breakdown
+        ],
     }
 
 
@@ -106,12 +140,24 @@ def _make_llm_node(
 
     def node(state: AtsWorkflowState) -> dict:
         template = prompts.get(prompt_id)
+        style_notes = (state.get("style_notes") or "").strip()
+        style_notes_section = (
+            f"\n\nSTYLE PREFERENCES FROM THE APPLICANT:\n{style_notes}\n"
+            if style_notes
+            else ""
+        )
         user = template.user_template.format(
             resume_text=state.get("resume_text", ""),
-            job_description=state.get("job_description", ""),
+            job_description=(
+                state.get("cleaned_job_description")
+                or state.get("job_description", "")
+            ),
             match_score=state.get("match_score"),
             matching_keywords=", ".join(state.get("matching_keywords", [])),
+            partial_keywords=", ".join(state.get("partial_keywords", [])),
             missing_keywords=", ".join(state.get("missing_keywords", [])),
+            requirement_evidence=_format_evidence(state),
+            style_notes_section=style_notes_section,
             improvement_suggestions=state.get("improvement_suggestions") or "",
             tailored_resume=state.get("tailored_resume") or "",
         )
@@ -124,6 +170,19 @@ def _make_llm_node(
         }
 
     return node
+
+
+def _format_evidence(state: AtsWorkflowState) -> str:
+    """Compact requirement-evidence text for AI prompt rendering."""
+    evidence = state.get("requirement_evidence") or {}
+    lines = []
+    for term, entry in evidence.items():
+        snippets = "; ".join(entry.get("evidence") or ["no evidence"])
+        lines.append(
+            f"- {term} ({entry.get('category', 'essential')}, "
+            f"{entry.get('status', 'missing')}): {snippets}"
+        )
+    return "\n".join(lines)
 
 
 def make_analysis_node(
@@ -166,11 +225,26 @@ def build_ats_workflow(client: ChatClient, prompts: PromptRegistry):
 
 
 def result_from_state(state: AtsWorkflowState) -> AtsAnalysisResult:
-    """Map the final workflow state onto the six-section contract."""
+    """Map the final workflow state onto the analysis contract."""
+    evidence = state.get("requirement_evidence") or {}
+    requirement_analysis = [
+        RequirementEvidence(
+            term=term,
+            status=entry.get("status", "missing"),
+            category=entry.get("category", "essential"),
+            evidence=entry.get("evidence") or [],
+        )
+        for term, entry in evidence.items()
+    ] or None
     return AtsAnalysisResult(
         ats_score=state.get("match_score", 0),
+        score_label=state.get("score_label") or "Estimated job-match score",
         matching_keywords=state.get("matching_keywords", []),
+        partial_keywords=state.get("partial_keywords", []),
         missing_keywords=state.get("missing_keywords", []),
+        requirement_analysis=requirement_analysis,
+        score_breakdown=state.get("score_breakdown"),
+        job_description_warning=state.get("job_description_warning"),
         improvement_suggestions=state.get("improvement_suggestions"),
         tailored_resume=state.get("tailored_resume"),
         cover_letter=state.get("cover_letter"),

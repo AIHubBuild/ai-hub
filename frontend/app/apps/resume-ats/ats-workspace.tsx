@@ -6,7 +6,9 @@ import { useAuth } from "../../components/auth/auth-provider";
 import { ApiError } from "../../lib/api";
 import {
   AtsAnalysisData,
+  RequirementEvidence,
   SUPPORTED_EXTENSIONS,
+  downloadCoverLetterDocx,
   downloadTailoredResumeDocx,
   runAtsAnalysis,
   uploadResume,
@@ -23,8 +25,11 @@ export function AtsWorkspace() {
   const [errorIsAuth, setErrorIsAuth] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [jobDescription, setJobDescription] = useState("");
+  const [styleNotes, setStyleNotes] = useState("");
   const [result, setResult] = useState<AtsAnalysisData | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingCoverLetter, setDownloadingCoverLetter] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canSubmit =
@@ -50,6 +55,7 @@ export function AtsWorkspace() {
       const analysis = await runAtsAnalysis(
         uploaded.resume_id,
         jobDescription.trim(),
+        styleNotes,
       );
       setResult(analysis);
       setStage("done");
@@ -62,24 +68,48 @@ export function AtsWorkspace() {
     }
   }
 
+  async function triggerDownload(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function handleDownload() {
     if (!result) return;
     setDownloading(true);
+    setDownloadError(null);
     try {
       const blob = await downloadTailoredResumeDocx(result.analysis_id);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = "tailored-resume.docx";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
+      triggerDownload(blob, "tailored-resume.docx");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Download failed.");
-      setStage("error");
+      setDownloadError(
+        caught instanceof Error ? caught.message : "Download failed.",
+      );
     } finally {
       setDownloading(false);
+    }
+  }
+
+  async function handleDownloadCoverLetter() {
+    if (!result) return;
+    setDownloadingCoverLetter(true);
+    setDownloadError(null);
+    try {
+      const blob = await downloadCoverLetterDocx(result.analysis_id);
+      triggerDownload(blob, "tailored-cover-letter.docx");
+    } catch (caught) {
+      setDownloadError(
+        caught instanceof Error
+          ? caught.message
+          : "Cover letter download failed.",
+      );
+    } finally {
+      setDownloadingCoverLetter(false);
     }
   }
 
@@ -87,13 +117,18 @@ export function AtsWorkspace() {
     setStage("idle");
     setError(null);
     setErrorIsAuth(false);
+    setDownloadError(null);
     setResult(null);
     setFileName(null);
     setJobDescription("");
+    setStyleNotes("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   }
+
+  const coverLetterText = (result?.cover_letter ?? "").trim();
+  const hasCoverLetter = coverLetterText.length > 0;
 
   if (authLoading) {
     return (
@@ -171,6 +206,22 @@ export function AtsWorkspace() {
           className="w-full rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-2 focus:outline-offset-2 focus:outline-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-500"
         />
 
+        <label
+          htmlFor="style-notes"
+          className="mb-1.5 mt-5 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+        >
+          Style preferences (optional)
+        </label>
+        <textarea
+          id="style-notes"
+          value={styleNotes}
+          onChange={(event) => setStyleNotes(event.target.value)}
+          rows={2}
+          maxLength={500}
+          placeholder="e.g. Keep it factual, short sentences, UK spelling…"
+          className="w-full rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-2 focus:outline-offset-2 focus:outline-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-500"
+        />
+
         <button
           type="submit"
           disabled={!canSubmit}
@@ -244,13 +295,22 @@ export function AtsWorkspace() {
 
         {stage === "done" && result !== null && (
           <div>
+            {result.job_description_warning !== null && (
+              <div
+                role="alert"
+                className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-400"
+              >
+                {result.job_description_warning}
+              </div>
+            )}
+
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-50">
                   ATS analysis complete
                 </h2>
                 <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                  Score computed by the deterministic keyword engine.
+                  Score computed by the deterministic matching engine.
                 </p>
               </div>
               <div className="text-right">
@@ -258,7 +318,7 @@ export function AtsWorkspace() {
                   {result.ats_score}
                 </div>
                 <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  ATS score
+                  {result.score_label}
                 </div>
               </div>
             </div>
@@ -269,10 +329,37 @@ export function AtsWorkspace() {
               tone="matched"
             />
             <KeywordSection
+              title="Transferable / partial matches"
+              keywords={result.partial_keywords}
+              tone="partial"
+            />
+            <KeywordSection
               title="Missing keywords"
               keywords={result.missing_keywords}
               tone="missing"
             />
+
+            <EvidenceSection requirements={result.requirement_analysis} />
+
+            {result.writing_review !== null &&
+              result.writing_review.issues.length > 0 && (
+                <details className="group mb-3 rounded-lg border border-amber-200 dark:border-amber-900">
+                  <summary className="flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 text-sm font-medium text-amber-900 marker:content-none hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950">
+                    Writing quality notes ({result.writing_review.issues.length})
+                    <span
+                      aria-hidden="true"
+                      className="text-amber-600 transition-transform group-open:rotate-180 dark:text-amber-400"
+                    >
+                      ▾
+                    </span>
+                  </summary>
+                  <ul className="list-disc space-y-1 border-t border-amber-100 px-4 py-3 pl-9 text-sm leading-relaxed text-amber-800 dark:border-amber-900 dark:text-amber-400">
+                    {result.writing_review.issues.map((issue) => (
+                      <li key={issue.code + issue.message}>{issue.message}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
 
             {result.improvement_suggestions && (
               <TextSection
@@ -283,8 +370,17 @@ export function AtsWorkspace() {
             {result.tailored_resume && (
               <TextSection title="Tailored resume" text={result.tailored_resume} />
             )}
-            {result.cover_letter && (
-              <TextSection title="Cover letter" text={result.cover_letter} />
+            {hasCoverLetter && (
+              <TextSection title="Cover letter" text={coverLetterText} />
+            )}
+
+            {downloadError !== null && (
+              <div
+                role="alert"
+                className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-400"
+              >
+                {downloadError}
+              </div>
             )}
 
             <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-zinc-100 pt-5 dark:border-zinc-800">
@@ -293,9 +389,23 @@ export function AtsWorkspace() {
                   type="button"
                   onClick={handleDownload}
                   disabled={downloading}
+                  aria-label="Download tailored resume as a DOCX file"
                   className="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:focus-visible:outline-zinc-50"
                 >
                   {downloading ? "Preparing DOCX…" : "Download tailored resume (DOCX)"}
+                </button>
+              )}
+              {hasCoverLetter && (
+                <button
+                  type="button"
+                  onClick={handleDownloadCoverLetter}
+                  disabled={downloadingCoverLetter}
+                  aria-label="Download cover letter as a DOCX file"
+                  className="inline-flex items-center justify-center rounded-lg border border-zinc-900 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-50 dark:text-zinc-50 dark:hover:bg-zinc-800 dark:focus-visible:outline-zinc-50"
+                >
+                  {downloadingCoverLetter
+                    ? "Preparing DOCX…"
+                    : "Download cover letter (DOCX)"}
                 </button>
               )}
               <button
@@ -320,7 +430,7 @@ function KeywordSection({
 }: {
   title: string;
   keywords: string[];
-  tone: "matched" | "missing";
+  tone: "matched" | "missing" | "partial";
 }) {
   if (keywords.length === 0) {
     return null;
@@ -328,7 +438,9 @@ function KeywordSection({
   const chip =
     tone === "matched"
       ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-400"
-      : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400";
+      : tone === "partial"
+        ? "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-400"
+        : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400";
   return (
     <section className="mb-5">
       <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
@@ -345,6 +457,64 @@ function KeywordSection({
         ))}
       </ul>
     </section>
+  );
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  essential: "Essential",
+  preferred: "Preferred",
+  technical_skills: "Technical skill",
+  responsibilities: "Responsibility",
+  experience: "Experience",
+  communication: "Communication",
+};
+
+function EvidenceSection({
+  requirements,
+}: {
+  requirements: RequirementEvidence[] | null;
+}) {
+  if (requirements === null || requirements.length === 0) {
+    return null;
+  }
+  return (
+    <details className="group mb-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
+      <summary className="flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 text-sm font-medium text-zinc-900 marker:content-none hover:bg-zinc-50 dark:text-zinc-50 dark:hover:bg-zinc-900">
+        Requirement evidence
+        <span
+          aria-hidden="true"
+          className="text-zinc-400 transition-transform group-open:rotate-180"
+        >
+          ▾
+        </span>
+      </summary>
+      <div className="space-y-2 border-t border-zinc-100 px-4 py-3 dark:border-zinc-800">
+        {requirements.map((requirement) => (
+          <div key={requirement.term}>
+            <p className="text-sm">
+              <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                {requirement.term}
+              </span>{" "}
+              <span className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                {CATEGORY_LABELS[requirement.category] ?? requirement.category} ·{" "}
+                {requirement.status}
+              </span>
+            </p>
+            {requirement.evidence.length > 0 ? (
+              <ul className="ml-4 mt-1 list-disc space-y-0.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                {requirement.evidence.map((line) => (
+                  <li key={line}>“{line}”</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="ml-4 mt-1 text-xs text-zinc-500 dark:text-zinc-500">
+                No evidence in the resume.
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 

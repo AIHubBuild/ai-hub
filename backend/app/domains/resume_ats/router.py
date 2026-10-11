@@ -171,12 +171,13 @@ def analyze_resume(
     if not _is_uuid(resume_id):
         raise _error(404, "Resume not found.")
     try:
-        analysis = service.run_ats_analysis(
+        analysis, result = service.run_ats_analysis(
             ai_core,
             session,
             resume_id=resume_id,
             job_description=body.job_description.strip(),
             user_id=user.id,
+            style_notes=body.style_notes,
         )
     except ResumeNotFoundError as exc:
         raise _error(404, "Resume not found.") from exc
@@ -192,12 +193,56 @@ def analyze_resume(
             resume_id=analysis.resume_id,
             run_id=analysis.run_id,
             ats_score=analysis.ats_score,
+            score_label=result.score_label,
             matching_keywords=analysis.matching_keywords,
+            partial_keywords=result.partial_keywords,
             missing_keywords=analysis.missing_keywords,
+            requirement_analysis=result.requirement_analysis,
+            score_breakdown=result.score_breakdown,
+            job_description_warning=result.job_description_warning,
+            writing_review=result.writing_review,
             improvement_suggestions=analysis.improvement_suggestions,
             tailored_resume=analysis.tailored_resume,
             cover_letter=analysis.cover_letter,
         ),
+    )
+
+
+@analyses_router.get(
+    "/{analysis_id}/tailored-cover-letter.docx",
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument"
+                ".wordprocessingml.document": {}
+            },
+            "description": "Cover letter as a DOCX attachment.",
+        }
+    },
+)
+def download_cover_letter(
+    analysis_id: str,
+    session: Session = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+) -> Response:
+    if not _is_uuid(analysis_id):
+        raise _error(404, "Analysis not found.")
+    try:
+        file_name, content = service.cover_letter_docx(
+            session, analysis_id, user.id
+        )
+    except AnalysisNotFoundError as exc:
+        raise _error(404, "Analysis not found.") from exc
+    except AnalysisNotReadyError as exc:
+        raise _error(409, "This analysis has no cover letter to download.") from exc
+
+    return Response(
+        content=content,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument"
+            ".wordprocessingml.document"
+        ),
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
     )
 
 

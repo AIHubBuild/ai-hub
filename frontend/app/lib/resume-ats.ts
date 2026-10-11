@@ -7,13 +7,46 @@ export interface UploadResumeData {
   extracted_characters: number;
 }
 
+export interface RequirementEvidence {
+  term: string;
+  status: string;
+  category: string;
+  evidence: string[];
+}
+
+export interface ScoreBreakdown {
+  category: string;
+  weight: number;
+  total: number;
+  supported: number;
+  partial: number;
+  missing: number;
+  score: number;
+}
+
+export interface WritingIssue {
+  code: string;
+  message: string;
+}
+
+export interface WritingReview {
+  passed: boolean;
+  issues: WritingIssue[];
+}
+
 export interface AtsAnalysisData {
   analysis_id: string;
   resume_id: string;
   run_id: string;
   ats_score: number;
+  score_label: string;
   matching_keywords: string[];
+  partial_keywords: string[];
   missing_keywords: string[];
+  requirement_analysis: RequirementEvidence[] | null;
+  score_breakdown: ScoreBreakdown[] | null;
+  job_description_warning: string | null;
+  writing_review: WritingReview | null;
   improvement_suggestions: string | null;
   tailored_resume: string | null;
   cover_letter: string | null;
@@ -49,6 +82,7 @@ export async function uploadResume(file: File): Promise<UploadResumeData> {
 export async function runAtsAnalysis(
   resumeId: string,
   jobDescription: string,
+  styleNotes?: string,
 ): Promise<AtsAnalysisData> {
   const response = await fetch(
     `${API_URL}/api/v1/resumes/${resumeId}/ats-analysis`,
@@ -58,7 +92,10 @@ export async function runAtsAnalysis(
         "Content-Type": "application/json",
         ...(await authHeaders()),
       },
-      body: JSON.stringify({ job_description: jobDescription }),
+      body: JSON.stringify({
+        job_description: jobDescription,
+        style_notes: styleNotes?.trim() || null,
+      }),
     },
   );
   const body = await requireOk<Envelope<AtsAnalysisData>>(response);
@@ -70,6 +107,19 @@ export async function downloadTailoredResumeDocx(
 ): Promise<Blob> {
   const response = await fetch(
     `${API_URL}/api/v1/analyses/${analysisId}/tailored-resume.docx`,
+    { headers: await authHeaders() },
+  );
+  if (!response.ok) {
+    throw new ApiError(await errorMessage(response), response.status);
+  }
+  return response.blob();
+}
+
+export async function downloadCoverLetterDocx(
+  analysisId: string,
+): Promise<Blob> {
+  const response = await fetch(
+    `${API_URL}/api/v1/analyses/${analysisId}/tailored-cover-letter.docx`,
     { headers: await authHeaders() },
   );
   if (!response.ok) {

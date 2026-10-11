@@ -473,6 +473,107 @@ def test_provider_failure_creates_no_analysis_row_but_error_run_record(tmp_path)
     assert records[0].status is RunStatus.ERROR
 
 
+def test_analysis_response_includes_explainability_fields(client):
+    test_client, _ = client
+    resume_id = upload_resume(test_client).json()["data"]["resume_id"]
+
+    response = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(),
+    )
+
+    data = response.json()["data"]
+    assert data["score_label"] == "Estimated job-match score"
+    assert data["partial_keywords"] == []
+    assert data["job_description_warning"] is None
+    requirements = {r["term"]: r for r in data["requirement_analysis"]}
+    assert requirements["active directory"]["status"] == "supported"
+    assert requirements["active directory"]["evidence"]
+    assert requirements["powershell"]["status"] == "missing"
+    assert data["score_breakdown"]
+
+
+def test_analysis_response_includes_writing_review(client):
+    test_client, _ = client
+    resume_id = upload_resume(test_client).json()["data"]["resume_id"]
+
+    response = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(),
+    )
+
+    data = response.json()["data"]
+    review = data["writing_review"]
+    assert review is not None
+    # The canned outputs omit the applicant name ("Jane") entirely, so
+    # the deterministic review must flag the consistency issue.
+    assert review["passed"] is False
+    assert any(issue["code"] == "missing_name" for issue in review["issues"])
+
+
+def test_analysis_accepts_style_notes(client):
+    test_client, _ = client
+    resume_id = upload_resume(test_client).json()["data"]["resume_id"]
+
+    response = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={
+            "job_description": JOB_DESCRIPTION,
+            "style_notes": "Prefer UK spelling.",
+        },
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["data"]["analysis_id"]
+
+
+def test_boilerplate_job_description_warns_and_scores_anyway(client):
+    test_client, _ = client
+    resume_id = upload_resume(test_client).json()["data"]["resume_id"]
+    boilerplate_jd = (
+        "Apply now\n"
+        "We use cookies to improve your experience\n"
+        "Privacy policy\n"
+        "Active Directory experience required."
+    )
+
+    response = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": boilerplate_jd},
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 201
+    data = response.json()["data"]
+    assert data["job_description_warning"] is not None
+    assert "boilerplate" in data["job_description_warning"]
+    # The genuine requirement still drives the analysis.
+    assert data["ats_score"] == 100
+    assert data["matching_keywords"] == ["active directory"]
+
+
+def test_synonym_match_is_reported_as_partial(client):
+    test_client, _ = client
+    resume_id = upload_resume(
+        test_client, content="Provided help desk support for office users."
+    ).json()["data"]["resume_id"]
+
+    response = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": "Technical support experience required."},
+        headers=auth_headers(),
+    )
+
+    data = response.json()["data"]
+    assert data["partial_keywords"] == ["technical support"]
+    requirements = {r["term"]: r for r in data["requirement_analysis"]}
+    assert requirements["technical support"]["status"] == "partial"
+    assert requirements["technical support"]["evidence"]
+
+
 def test_upload_docx_through_api(client):
     from io import BytesIO
 
@@ -604,6 +705,122 @@ def test_download_malformed_analysis_id_returns_404_not_500(client):
     response = test_client.get(
         "/api/v1/analyses/not-a-uuid/tailored-resume.docx",
         headers=auth_headers(),
+    )
+
+    assert response.status_code == 404
+
+
+def test_download_cover_letter_docx(client):
+    from io import BytesIO
+
+    from docx import Document as DocxDocument
+
+    test_client, _ = client
+    resume_id = upload_resume(test_client).json()["data"]["resume_id"]
+    analysis_id = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(),
+    ).json()["data"]["analysis_id"]
+
+    response = test_client.get(
+        f"/api/v1/analyses/{analysis_id}/tailored-cover-letter.docx",
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument"
+    )
+    assert "tailored-cover-letter.docx" in response.headers["content-disposition"]
+    assert "attachment" in response.headers["content-disposition"]
+    assert response.content.startswith(b"PK")
+
+    parsed = DocxDocument(BytesIO(response.content))
+    paragraphs = [p.text for p in parsed.paragraphs if p.text.strip()]
+    assert "Tailored cover letter content." in paragraphs
+
+
+def test_download_cover_letter_does_not_regenerate_or_reanalyze(client):
+    """Downloading must reuse stored content without new AI calls."""
+    test_client, app = client
+    resume_id = upload_resume(test_client).json()["data"]["resume_id"]
+    analysis_id = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(),
+    ).json()["data"]["analysis_id"]
+
+    runs_before = len(
+        app.state.ai_core.run_records.list_for_user(USER_A)
+    )
+    response = test_client.get(
+        f"/api/v1/analyses/{analysis_id}/tailored-cover-letter.docx",
+        headers=auth_headers(),
+    )
+    runs_after = len(app.state.ai_core.run_records.list_for_user(USER_A))
+
+    assert response.status_code == 200
+    assert runs_after == runs_before
+
+
+def test_download_cover_letter_unknown_analysis_returns_404(client):
+    test_client, _ = client
+    response = test_client.get(
+        "/api/v1/analyses/550e8400-e29b-41d4-a716-446655440000/tailored-cover-letter.docx",
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 404
+
+
+def test_download_cover_letter_requires_authentication(client):
+    test_client, _ = client
+    response = test_client.get(
+        "/api/v1/analyses/550e8400-e29b-41d4-a716-446655440000/tailored-cover-letter.docx"
+    )
+
+    assert response.status_code == 401
+
+
+def test_download_cover_letter_without_content_returns_409(client):
+    test_client, app = client
+    resume_id = upload_resume(test_client).json()["data"]["resume_id"]
+
+    with app.state.session_factory() as session:
+        record = AtsAnalysisRecord(
+            resume_id=resume_id,
+            run_id="550e8400-e29b-41d4-a716-446655440001",
+            job_description=JOB_DESCRIPTION,
+            ats_score=50,
+            matching_keywords=[],
+            missing_keywords=[],
+            cover_letter=None,
+        )
+        session.add(record)
+        session.commit()
+        analysis_id = record.id
+
+    response = test_client.get(
+        f"/api/v1/analyses/{analysis_id}/tailored-cover-letter.docx",
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 409
+
+
+def test_download_cover_letter_other_user_returns_404(client):
+    test_client, _ = client
+    resume_id = upload_resume(test_client, user_id=USER_A).json()["data"]["resume_id"]
+    analysis_id = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(USER_A),
+    ).json()["data"]["analysis_id"]
+
+    response = test_client.get(
+        f"/api/v1/analyses/{analysis_id}/tailored-cover-letter.docx",
+        headers=auth_headers(USER_B),
     )
 
     assert response.status_code == 404

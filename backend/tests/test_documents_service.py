@@ -132,3 +132,64 @@ def test_docx_generation_produces_valid_document_with_sections():
 def test_docx_generation_handles_empty_text():
     content = documents.build_tailored_resume_docx("")
     assert content.startswith(b"PK")
+
+
+def test_docx_keeps_contact_and_date_lines_as_plain_text():
+    text = (
+        "Jane Doe\n"
+        "jane.doe@example.com | +49 123 456 789 | Berlin\n"
+        "Professional Summary:\n"
+        "IT support specialist.\n"
+        "Experience:\n"
+        "IT Support Engineer, Acme GmbH — June 2021 – Present\n"
+    )
+    content = documents.build_tailored_resume_docx(text)
+
+    parsed = DocxDocument(BytesIO(content))
+    paragraphs = [p.text for p in parsed.paragraphs if p.text.strip()]
+    assert paragraphs[0] == "Jane Doe"
+    assert "jane.doe@example.com" in paragraphs[1]
+    assert any("June 2021" in p for p in paragraphs)
+
+
+def test_validate_docx_accepts_generated_content():
+    content = documents.build_tailored_resume_docx(RESUME_TEXT)
+
+    assert documents.validate_docx(content) is True
+    assert documents.validate_docx(b"not a docx") is False
+
+
+COVER_LETTER = (
+    "Jane Doe\n"
+    "jane.doe@example.com | +49 123 456 789\n"
+    "\n"
+    "Dear Hiring Manager,\n"
+    "\n"
+    "I am writing to apply for the IT Support Engineer position.\n"
+    "My experience with Active Directory and Microsoft 365 matches your "
+    "requirements.\n"
+    "\n"
+    "Sincerely,\n"
+    "Jane Doe"
+)
+
+
+def test_cover_letter_docx_preserves_wording_and_paragraphs():
+    content = documents.build_cover_letter_docx(COVER_LETTER)
+
+    assert content.startswith(b"PK")
+    assert documents.validate_docx(content)
+
+    parsed = DocxDocument(BytesIO(content))
+    paragraphs = [p.text for p in parsed.paragraphs if p.text.strip()]
+    assert paragraphs[0] == "Jane Doe"
+    assert "Dear Hiring Manager," in paragraphs
+    assert "Sincerely," in paragraphs
+    joined = "\n".join(paragraphs)
+    assert "Active Directory and Microsoft 365" in joined
+
+
+def test_cover_letter_docx_handles_empty_text():
+    content = documents.build_cover_letter_docx("")
+
+    assert content.startswith(b"PK")

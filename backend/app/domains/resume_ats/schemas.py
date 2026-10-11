@@ -35,19 +35,49 @@ class AtsAnalysisRequest(BaseModel):
     job_description: str
 
 
+class RequirementEvidence(BaseModel):
+    """Explainable evidence for one job requirement term."""
+
+    term: str
+    status: str  # supported | partial | missing
+    category: str  # essential | preferred
+    evidence: list[str]
+
+
+class WritingIssue(BaseModel):
+    """One flagged writing-quality issue (deterministic review)."""
+
+    code: str
+    message: str
+
+
+class WritingReview(BaseModel):
+    """Outcome of the writing-quality review stage."""
+
+    passed: bool
+    issues: list[WritingIssue]
+
+
 class AtsAnalysisResult(BaseModel):
     """Output contract for the ATS analysis workflow.
 
-    Exactly the six sections of the approved structured analysis
-    baseline (docs/09_Migration_Analysis.md §8.1): score, matching
-    keywords, missing keywords, improvement suggestions, tailored
-    resume, cover letter. The last three are populated by the AI nodes
-    in a later slice and remain None until then.
+    The first six fields are the structured analysis baseline
+    (docs/09_Migration_Analysis.md §8.1): score, matching keywords,
+    missing keywords, improvement suggestions, tailored resume, cover
+    letter. The additional fields carry the transparent scoring
+    methodology (evidence per requirement, partial/transferable
+    matches, per-category breakdown, and a job-description warning).
     """
 
     ats_score: int
+    score_label: str = "Estimated job-match score"
     matching_keywords: list[str]
+    partial_keywords: list[str] = []
     missing_keywords: list[str]
+    requirement_analysis: list[RequirementEvidence] | None = None
+    score_breakdown: list[dict] | None = None
+    job_description_warning: str | None = None
+    writing_review: WritingReview | None = None
     improvement_suggestions: str | None = None
     tailored_resume: str | None = None
     cover_letter: str | None = None
@@ -85,6 +115,11 @@ class AtsAnalysisApiRequest(BaseModel):
 
     job_description: str = Field(
         min_length=1, max_length=20_000, description="Target job description."
+    )
+    style_notes: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Optional applicant-supplied style preferences.",
     )
 
     @field_validator("job_description")
@@ -132,8 +167,14 @@ class AnalysisData(BaseModel):
     resume_id: str
     run_id: str
     ats_score: int
+    score_label: str = "Estimated job-match score"
     matching_keywords: list[str]
+    partial_keywords: list[str] = []
     missing_keywords: list[str]
+    requirement_analysis: list[RequirementEvidence] | None = None
+    score_breakdown: list[dict] | None = None
+    job_description_warning: str | None = None
+    writing_review: WritingReview | None = None
     improvement_suggestions: str | None = None
     tailored_resume: str | None = None
     cover_letter: str | None = None

@@ -25,7 +25,13 @@ from app.ai_core import AICore
 from app.ai_core.providers.openai import ProviderError
 from app.ai_core.workflows import WorkflowNotFoundError
 from app.core.config import Settings, get_settings
+from app.domains.resume_ats.schemas import (
+    AtsAnalysisResult,
+    WritingIssue as WritingIssueSchema,
+    WritingReview as WritingReviewSchema,
+)
 from app.domains.resume_ats.workflow import ATS_WORKFLOW_ID, result_from_state
+from app.domains.resume_ats.writing_review import review_writing
 from app.models.resume import AtsAnalysisRecord, Resume
 from app.services import documents
 
@@ -103,13 +109,20 @@ def run_ats_analysis(
     resume_id: str,
     job_description: str,
     user_id: str,
-) -> AtsAnalysisRecord:
+    style_notes: str | None = None,
+) -> tuple[AtsAnalysisRecord, AtsAnalysisResult]:
     """Run the ATS workflow for a user-owned resume against a job description.
 
-    The deterministic engine computes score/keywords; the AI nodes fill
-    the remaining three sections through the configured provider. Both
-    the analysis record and the ai_core run record are persisted,
-    scoped to `user_id`.
+    The deterministic matcher computes the estimated score, keyword
+    lists, and per-requirement evidence; the AI nodes fill the remaining
+    sections through the configured provider. A deterministic
+    writing-quality review then flags any stylistic or consistency
+    issues. Both the analysis record and the ai_core run record are
+    persisted, scoped to `user_id`.
+
+    Returns the persisted record and the full result contract (the
+    explainability and review fields are computed per run and are not
+    persisted to the analysis table).
     """
     resume = get_resume(session, resume_id, user_id)
 
@@ -119,6 +132,7 @@ def run_ats_analysis(
             {
                 "resume_text": resume.extracted_text,
                 "job_description": job_description,
+                "style_notes": style_notes,
             },
             user_id=user_id,
             domain=DOMAIN,
@@ -136,6 +150,16 @@ def run_ats_analysis(
         ) from exc
 
     result = result_from_state(run.output_state)
+    review = review_writing(
+        resume.extracted_text, result.tailored_resume, result.cover_letter
+    )
+    result.writing_review = WritingReviewSchema(
+        passed=review.passed,
+        issues=[
+            WritingIssueSchema(code=issue.code, message=issue.message)
+            for issue in review.issues
+        ],
+    )
     record = AtsAnalysisRecord(
         resume_id=resume.id,
         run_id=run.run_id,
@@ -150,7 +174,7 @@ def run_ats_analysis(
     session.add(record)
     session.commit()
     session.refresh(record)
-    return record
+    return record, result
 
 
 def get_analysis(
@@ -194,4 +218,22 @@ def tailored_resume_docx(
     return (
         "tailored-resume.docx",
         documents.build_tailored_resume_docx(analysis.tailored_resume),
+    )
+
+
+def cover_letter_docx(
+    session: Session, analysis_id: str, user_id: str
+) -> tuple[str, bytes]:
+    """Render the cover letter of an analysis as DOCX bytes.
+
+    Returns (file_name, bytes). The wording is the letter generated
+    during the analysis — the download never regenerates or alters it.
+    Raises AnalysisNotReadyError when the analysis has no cover letter.
+    """
+    analysis = get_analysis(session, analysis_id, user_id)
+    if not analysis.cover_letter:
+        raise AnalysisNotReadyError(analysis_id)
+    return (
+        "tailored-cover-letter.docx",
+        documents.build_cover_letter_docx(analysis.cover_letter),
     )

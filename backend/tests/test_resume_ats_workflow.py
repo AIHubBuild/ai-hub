@@ -83,7 +83,7 @@ def test_analysis_node_uses_deterministic_inputs_and_records_prompt_version():
     )
 
     assert output["improvement_suggestions"].startswith("Add PowerShell")
-    assert output["prompt_versions"] == {"analysis": 1}
+    assert output["prompt_versions"] == {"analysis": 2}
     rendered = client.calls[0]["user"]
     assert "57" in rendered
     assert "active directory" in rendered
@@ -108,10 +108,28 @@ def test_tailored_resume_node_records_prompt_version():
     )
 
     assert output["tailored_resume"] == "Tailored resume content."
-    assert output["prompt_versions"] == {"tailored_resume": 1}
+    assert output["prompt_versions"] == {"tailored_resume": 3}
     rendered = client.calls[0]["user"]
     assert "Suggestions." in rendered
     assert "powershell" in rendered
+    assert "STYLE PREFERENCES" not in rendered
+
+
+def test_style_notes_are_rendered_when_provided():
+    client = ScriptedClient(responses=["Tailored resume content."])
+    node = make_tailored_resume_node(client, make_registry())
+
+    node(
+        {
+            "resume_text": RESUME,
+            "job_description": JOB_DESCRIPTION,
+            "style_notes": "Use UK spelling and short sentences.",
+        }
+    )
+
+    rendered = client.calls[0]["user"]
+    assert "STYLE PREFERENCES FROM THE APPLICANT" in rendered
+    assert "Use UK spelling and short sentences." in rendered
 
 
 def test_cover_letter_node_records_prompt_version():
@@ -128,7 +146,7 @@ def test_cover_letter_node_records_prompt_version():
     )
 
     assert output["cover_letter"] == "Tailored cover letter content."
-    assert output["prompt_versions"] == {"cover_letter": 1}
+    assert output["prompt_versions"] == {"cover_letter": 3}
     rendered = client.calls[0]["user"]
     assert "Tailored resume content." in rendered
     assert JOB_DESCRIPTION in rendered
@@ -139,7 +157,7 @@ def test_ai_node_uses_latest_registered_prompt_version():
 
     client = make_client()
     registry = make_registry()
-    registry.register(ATS_ANALYSIS_TEMPLATE.model_copy(update={"version": 2}))
+    registry.register(ATS_ANALYSIS_TEMPLATE.model_copy(update={"version": 3}))
     node = make_analysis_node(client, registry)
 
     output = node(
@@ -152,7 +170,7 @@ def test_ai_node_uses_latest_registered_prompt_version():
         }
     )
 
-    assert output["prompt_versions"] == {"analysis": 2}
+    assert output["prompt_versions"] == {"analysis": 3}
 
 
 # ---------------------------------------------------------------
@@ -179,9 +197,9 @@ def test_graph_runs_end_to_end_with_deterministic_engine_owning_the_score():
     assert state["tailored_resume"] == "Tailored resume content."
     assert state["cover_letter"] == "Tailored cover letter content."
     assert state["prompt_versions"] == {
-        "analysis": 1,
-        "tailored_resume": 1,
-        "cover_letter": 1,
+        "analysis": 2,
+        "tailored_resume": 3,
+        "cover_letter": 3,
     }
     assert len(client.calls) == 3
 

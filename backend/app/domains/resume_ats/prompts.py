@@ -307,6 +307,160 @@ PROMPT_TEMPLATES = [
     COVER_LETTER_TEMPLATE,
 ]
 
+# ---------------------------------------------------------------
+# Version 2 additions — evidence-backed accuracy rules.
+# Registered as later versions of the same prompt ids; the registry
+# resolves the latest version at invocation time.
+# ---------------------------------------------------------------
+
+_ANALYSIS_V2_ADDITIONS = (
+    "\n\n"
+    "ADDITIONAL INPUTS:\n"
+    "- Transferable / partial matches (synonym or equivalent wording): "
+    "{partial_keywords}\n"
+    "- Requirement evidence found in the resume: {requirement_evidence}\n"
+    "\n"
+    "ADDITIONAL RULES:\n"
+    "- For every recommendation that references a requirement, cite the "
+    "resume evidence listed above. Do not claim evidence that is not "
+    "there.\n"
+    "- For each missing requirement, suggest honest ways to address it — "
+    "projects, certifications, structured learning — never inventing or "
+    "exaggerating experience.\n"
+)
+
+_TAILORED_RESUME_V2_ADDITIONS = (
+    "\n\n"
+    "ADDITIONAL INPUTS:\n"
+    "- Transferable / partial matches: {partial_keywords}\n"
+    "- Requirement evidence found in the resume: {requirement_evidence}\n"
+    "\n"
+    "ADDITIONAL RULES:\n"
+    "- Preserve the exact employers, job titles, and dates from the "
+    "master resume.\n"
+    "- Clearly label lab work, coursework, training, and personal "
+    "projects as such; never present them as professional employment.\n"
+    "- Only reorganize, emphasize, or reword existing resume content — "
+    "never add experience, metrics, certifications, employers, or skills "
+    "that are not in the master resume.\n"
+)
+
+_COVER_LETTER_V2_ADDITIONS = (
+    "\n\n"
+    "ADDITIONAL RULES:\n"
+    "- Only reference experience and skills that appear in the optimized "
+    "resume above. Do not introduce new claims, achievements, or "
+    "employers.\n"
+    "- If a job requirement is not supported by the optimized resume, do "
+    "not imply the candidate has it.\n"
+)
+
+ATS_ANALYSIS_TEMPLATE_V2 = PromptTemplate(
+    prompt_id="resume_ats/ats_analysis",
+    version=2,
+    system=ATS_ANALYSIS_TEMPLATE.system,
+    user_template=ATS_ANALYSIS_TEMPLATE.user_template + _ANALYSIS_V2_ADDITIONS,
+)
+
+TAILORED_RESUME_TEMPLATE_V2 = PromptTemplate(
+    prompt_id="resume_ats/tailored_resume",
+    version=2,
+    system=TAILORED_RESUME_TEMPLATE.system,
+    user_template=(
+        TAILORED_RESUME_TEMPLATE.user_template + _TAILORED_RESUME_V2_ADDITIONS
+    ),
+)
+
+COVER_LETTER_TEMPLATE_V2 = PromptTemplate(
+    prompt_id="resume_ats/cover_letter",
+    version=2,
+    system=COVER_LETTER_TEMPLATE.system,
+    user_template=COVER_LETTER_TEMPLATE.user_template + _COVER_LETTER_V2_ADDITIONS,
+)
+
+PROMPT_TEMPLATES.extend(
+    [
+        ATS_ANALYSIS_TEMPLATE_V2,
+        TAILORED_RESUME_TEMPLATE_V2,
+        COVER_LETTER_TEMPLATE_V2,
+    ]
+)
+
+# ---------------------------------------------------------------
+# Version 3 additions — natural-writing quality rules.
+# The applicant's verified facts remain the source of truth; these
+# rules govern style only. ``{style_notes_section}`` is filled by the
+# workflow with any applicant-supplied style preferences (or empty).
+# ---------------------------------------------------------------
+
+_TAILORED_RESUME_V3_ADDITIONS = (
+    "\n\n"
+    "NATURAL WRITING RULES:\n"
+    "- Write direct, specific sentences. Prefer concrete actions and "
+    "evidence over abstract claims about excellence, passion, or "
+    "operational success.\n"
+    "- Vary sentence length and openings. Do not start consecutive "
+    "sentences with the same word.\n"
+    "- Avoid empty corporate phrases such as \"I am passionate about "
+    "leveraging my skills\" or \"I am confident in my ability to "
+    "contribute effectively\", and avoid self-praise without evidence.\n"
+    "- Do not use em dashes as a default style. Use commas, full stops, "
+    "or a rewritten sentence instead. Keep necessary hyphens in "
+    "standard technical terms (for example \"second-line support\" and "
+    "\"ITIL-aligned\").\n"
+    "- Avoid repetitive colon-led statements and formulaic three-part "
+    "lists.\n"
+    "- Preserve the applicant's professional voice. Do not add slang, "
+    "informality, or an artificial personality.\n"
+    "- Do not invent first-person stories, motivations, or anecdotes the "
+    "applicant has not supplied.\n"
+    "{style_notes_section}"
+)
+
+_COVER_LETTER_V3_ADDITIONS = (
+    "\n\n"
+    "NATURAL WRITING RULES:\n"
+    "- Write as a capable applicant explaining their own experience: "
+    "direct, specific, natural sentences with varied openings and "
+    "lengths.\n"
+    "- Use contractions selectively where they fit a professional tone; "
+    "do not force informality.\n"
+    "- Avoid generic AI phrasing such as \"I am excited to embark on "
+    "this journey\", \"Your commitment to innovation and operational "
+    "excellence resonates with me\", and \"I believe I would be a "
+    "valuable addition to your team\".\n"
+    "- Do not start sentences repeatedly with \"Furthermore\", "
+    "\"Moreover\", \"Additionally\", or similar transitions.\n"
+    "- Do not use em dashes as a default style; keep necessary hyphens "
+    "in standard technical terms.\n"
+    "- Do not infer personality traits or motivations that the applicant "
+    "has not supplied.\n"
+    "{style_notes_section}"
+)
+
+TAILORED_RESUME_TEMPLATE_V3 = PromptTemplate(
+    prompt_id="resume_ats/tailored_resume",
+    version=3,
+    system=TAILORED_RESUME_TEMPLATE.system,
+    user_template=(
+        TAILORED_RESUME_TEMPLATE_V2.user_template + _TAILORED_RESUME_V3_ADDITIONS
+    ),
+)
+
+COVER_LETTER_TEMPLATE_V3 = PromptTemplate(
+    prompt_id="resume_ats/cover_letter",
+    version=3,
+    system=COVER_LETTER_TEMPLATE.system,
+    user_template=COVER_LETTER_TEMPLATE_V2.user_template + _COVER_LETTER_V3_ADDITIONS,
+)
+
+PROMPT_TEMPLATES.extend(
+    [
+        TAILORED_RESUME_TEMPLATE_V3,
+        COVER_LETTER_TEMPLATE_V3,
+    ]
+)
+
 
 def register_prompts(registry: PromptRegistry) -> None:
     """Register the Resume ATS prompt assets into the shared registry.

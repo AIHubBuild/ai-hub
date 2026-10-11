@@ -14,6 +14,8 @@ text.
 
 from io import BytesIO
 
+import re
+
 from docx import Document as DocxDocument
 from docx.shared import Pt
 from pypdf import PdfReader
@@ -83,7 +85,8 @@ def build_tailored_resume_docx(text: str) -> bytes:
     """Render plain-text tailored resume content as a DOCX document.
 
     Simple, deterministic styling: the first non-empty line becomes the
-    document title, recognized section lines become headings, and all
+    document title, recognized section lines become headings, contact
+    and date lines are preserved as plain body paragraphs, and all
     other lines become body paragraphs (bullet glyphs are stripped).
     """
     document = DocxDocument()
@@ -92,6 +95,9 @@ def build_tailored_resume_docx(text: str) -> bytes:
     first = True
     for line in lines:
         if not line:
+            continue
+        if _is_contact_or_date_line(line):
+            _append_paragraph(document, line, bold=False, size_pt=11)
             continue
         cleaned = line.lstrip("•-*").strip()
         if first:
@@ -106,6 +112,48 @@ def build_tailored_resume_docx(text: str) -> bytes:
     buffer = BytesIO()
     document.save(buffer)
     return buffer.getvalue()
+
+
+def validate_docx(content: bytes) -> bool:
+    """True when `content` parses as a DOCX with readable text."""
+    try:
+        document = DocxDocument(BytesIO(content))
+    except Exception:
+        return False
+    return any(paragraph.text.strip() for paragraph in document.paragraphs)
+
+
+def build_cover_letter_docx(text: str) -> bytes:
+    """Render plain-text cover-letter content as a DOCX document.
+
+    The letter's wording is preserved exactly: every non-empty line
+    becomes a paragraph in order (blank lines create spacing). No
+    heuristics invent contact details, dates, or headings — the letter
+    is rendered as generated during the analysis.
+    """
+    document = DocxDocument()
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped:
+            _append_paragraph(document, stripped, bold=False, size_pt=11)
+        else:
+            document.add_paragraph()
+
+    buffer = BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
+def _is_contact_or_date_line(line: str) -> bool:
+    if "@" in line or "linkedin.com" in line.lower():
+        return True
+    if re.search(r"\+?[\d\s().\-]{9,}", line):
+        return True
+    # Date ranges like "2020 - 2023" or "June 2020 – Present".
+    if re.search(r"(19|20)\d{2}\s*[-–—]\s*((19|20)\d{2}|present)", line, re.IGNORECASE):
+        return True
+    return False
 
 
 def _extension_of(filename: str) -> str:
