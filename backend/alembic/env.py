@@ -1,10 +1,13 @@
 """Alembic environment.
 
-Resolves the database URL from application settings (honoring an
-explicit ``sqlalchemy.url`` set by callers, e.g. tests), and targets the
-metadata of all SQLAlchemy models in ``app/models``.
+Resolves the database URL as follows: an explicit ``DATABASE_URL``
+environment variable wins; otherwise an explicit ``sqlalchemy.url``
+set by callers (e.g. tests) is honored; otherwise the application
+settings default applies. Targets the metadata of all SQLAlchemy models
+in ``app/models``.
 """
 
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -18,7 +21,9 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-if not config.get_main_option("sqlalchemy.url"):
+if os.environ.get("DATABASE_URL"):
+    config.set_main_option("sqlalchemy.url", get_settings().database_url)
+elif not config.get_main_option("sqlalchemy.url"):
     config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 target_metadata = Base.metadata

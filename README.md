@@ -7,13 +7,15 @@ designed to host multiple AI assistants — Resume ATS, IT Support Copilot,
 Career Coach, Interview Coach, Job Matching, and future AI agents — as
 pluggable modules on one shared foundation.
 
-> Status: **Platform foundation + assistant catalogue.** The Next.js +
-> FastAPI scaffold is in place, and the first domain — the platform
-> assistant catalogue — is implemented end-to-end: a FastAPI domain
-> (`GET /api/v1/assistants`), a Next.js dashboard with assistant cards,
-> and per-assistant detail pages, covered by backend tests.
-> Authentication, database, resume, job, and AI integrations have not
-> been built yet.
+> Status: **Platform foundation + assistant catalogue + Resume ATS.**
+> The Next.js + FastAPI scaffold is in place. The assistant catalogue is
+> implemented end-to-end, and the first assistant — the ATS Resume
+> Assistant — is integrated: resume upload (PDF/DOCX/TXT, 5 MB limit),
+> ATS analysis via the deterministic keyword engine plus an AI provider
+> (OpenAI-compatible, configured with `OPENAI_API_KEY`), run-record
+> persistence, and tailored-resume DOCX download.
+> Authentication, user accounts, Supabase, and the remaining assistants
+> (IT Support Copilot, Career Coach, …) have not been built yet.
 
 The detailed product and technical blueprint lives in [`docs/`](docs/) —
 those documents are the primary source of truth for the platform.
