@@ -1,12 +1,14 @@
 """Pydantic schemas for the Resume ATS domain.
 
-Result models for the deterministic engine, plus the domain-level
-contracts that the future ATS workflow and API consume. The API
-request/response schemas are added when the ATS endpoints land in a
-later slice.
+Result models for the deterministic engine, the domain-level workflow
+contracts, and the HTTP request/response models for the domain's API
+(`docs/07_API_Design.md` §13). Responses follow the platform envelope
+(`docs/07_API_Design.md` §3.4).
 """
 
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class KeywordMatchResult(BaseModel):
@@ -71,3 +73,73 @@ def ats_analysis_result(
         tailored_resume=tailored_resume,
         cover_letter=cover_letter,
     )
+
+
+# ---------------------------------------------------------------
+# HTTP API schemas (docs/07_API_Design.md §13)
+# ---------------------------------------------------------------
+
+
+class AtsAnalysisApiRequest(BaseModel):
+    """Request body for POST /resumes/{resume_id}/ats-analysis."""
+
+    job_description: str = Field(
+        min_length=1, max_length=20_000, description="Target job description."
+    )
+
+    @field_validator("job_description")
+    @classmethod
+    def job_description_must_not_be_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("job_description must not be blank.")
+        return stripped
+
+
+class UploadResumeData(BaseModel):
+    resume_id: str
+    file_name: str
+    extracted_characters: int
+
+
+class UploadResumeResponse(BaseModel):
+    success: bool = True
+    message: str
+    data: UploadResumeData
+
+
+class AnalysisSummary(BaseModel):
+    analysis_id: str
+    ats_score: int
+    created_at: datetime
+
+
+class ResumeDetailData(BaseModel):
+    resume_id: str
+    file_name: str
+    created_at: datetime
+    latest_analysis: AnalysisSummary | None = None
+
+
+class ResumeDetailResponse(BaseModel):
+    success: bool = True
+    message: str
+    data: ResumeDetailData
+
+
+class AnalysisData(BaseModel):
+    analysis_id: str
+    resume_id: str
+    run_id: str
+    ats_score: int
+    matching_keywords: list[str]
+    missing_keywords: list[str]
+    improvement_suggestions: str | None = None
+    tailored_resume: str | None = None
+    cover_letter: str | None = None
+
+
+class AnalysisResponse(BaseModel):
+    success: bool = True
+    message: str
+    data: AnalysisData

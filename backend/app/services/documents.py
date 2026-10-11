@@ -1,0 +1,159 @@
+"""Document services: text extraction and DOCX generation.
+
+Extraction ports the legacy ATS `file_utils.py` behavior
+(`docs/09_Migration_Analysis.md` §2.1.8, §3.2 KEEP) onto FastAPI-shaped
+inputs: bytes + original filename. DOCX generation ports the
+`generate_documents.py` section-based styling (§3.2 REFACTOR) with the
+hardcoded personal-data heuristics removed — no location guessing, no
+name assumptions.
+
+Validation rules (legacy-preserved): extension whitelist (.pdf, .docx,
+.txt), a configured size limit (default 5 MB), and non-empty extracted
+text.
+"""
+
+from io import BytesIO
+
+from docx import Document as DocxDocument
+from docx.shared import Pt
+from pypdf import PdfReader
+
+from app.services.errors import (
+    DocumentError,
+    EmptyDocumentError,
+    InvalidFileTypeError,
+    UnreadableDocumentError,
+)
+
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}
+
+DEFAULT_MAX_SIZE_BYTES = 5 * 1024 * 1024
+
+# Section headings recognized when rendering a plain-text tailored
+# resume into DOCX. Compared case-insensitively after light cleanup.
+SECTION_HEADINGS = {
+    "summary",
+    "professional summary",
+    "skills",
+    "technical skills",
+    "core competencies",
+    "experience",
+    "work experience",
+    "professional experience",
+    "projects",
+    "education",
+    "certifications",
+    "certificates",
+    "languages",
+}
+
+
+def extract_text(filename: str, data: bytes, max_size_bytes: int = DEFAULT_MAX_SIZE_BYTES) -> str:
+    """Extract plain text from an uploaded resume file.
+
+    Raises InvalidFileTypeError for unsupported extensions and
+    DocumentError subclasses for size/content problems.
+    """
+    if len(data) > max_size_bytes:
+        raise DocumentError(
+            f"File exceeds the maximum allowed size of "
+            f"{max_size_bytes // (1024 * 1024)} MB."
+        )
+
+    extension = _extension_of(filename)
+    if extension not in SUPPORTED_EXTENSIONS:
+        raise InvalidFileTypeError(
+            "Unsupported file type. Supported formats: PDF, DOCX, TXT."
+        )
+
+    if extension == ".txt":
+        text = _extract_txt(data)
+    elif extension == ".pdf":
+        text = _extract_pdf(data)
+    else:
+        text = _extract_docx(data)
+
+    if not text.strip():
+        raise EmptyDocumentError("No readable text found in the uploaded file.")
+
+    return text.strip()
+
+
+def build_tailored_resume_docx(text: str) -> bytes:
+    """Render plain-text tailored resume content as a DOCX document.
+
+    Simple, deterministic styling: the first non-empty line becomes the
+    document title, recognized section lines become headings, and all
+    other lines become body paragraphs (bullet glyphs are stripped).
+    """
+    document = DocxDocument()
+
+    lines = [line.strip() for line in text.splitlines()]
+    first = True
+    for line in lines:
+        if not line:
+            continue
+        cleaned = line.lstrip("•-*").strip()
+        if first:
+            first = False
+            _append_paragraph(document, cleaned, bold=True, size_pt=20)
+            continue
+        if _is_section_heading(cleaned):
+            _append_paragraph(document, cleaned, bold=True, size_pt=14)
+            continue
+        _append_paragraph(document, cleaned, bold=False, size_pt=11)
+
+    buffer = BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
+def _extension_of(filename: str) -> str:
+    return ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
+
+
+def _extract_txt(data: bytes) -> str:
+    for encoding in ("utf-8", "latin-1"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise UnreadableDocumentError("Could not decode the uploaded text file.")
+
+
+def _extract_pdf(data: bytes) -> str:
+    try:
+        reader = PdfReader(BytesIO(data))
+    except Exception as exc:
+        raise UnreadableDocumentError("Could not read the uploaded PDF.") from exc
+    pages = []
+    for page in reader.pages:
+        try:
+            pages.append(page.extract_text() or "")
+        except Exception as exc:
+            raise UnreadableDocumentError(
+                "Could not extract text from the uploaded PDF."
+            ) from exc
+    return "\n".join(pages)
+
+
+def _extract_docx(data: bytes) -> str:
+    try:
+        document = DocxDocument(BytesIO(data))
+    except Exception as exc:
+        raise UnreadableDocumentError("Could not read the uploaded DOCX.") from exc
+    return "\n".join(
+        paragraph.text for paragraph in document.paragraphs
+    )
+
+
+def _is_section_heading(line: str) -> bool:
+    normalized = line.rstrip(":").strip().lower()
+    return normalized in SECTION_HEADINGS
+
+
+def _append_paragraph(document: DocxDocument, text: str, *, bold: bool, size_pt: int) -> None:
+    paragraph = document.add_paragraph()
+    run = paragraph.add_run(text)
+    run.bold = bold
+    run.font.size = Pt(size_pt)

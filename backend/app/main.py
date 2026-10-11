@@ -1,15 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.ai_core import create_ai_core
 from app.ai_core.run_records_db import SQLAlchemyRunRecordStore
-from app.api.errors import http_exception_handler
+from app.api.errors import register_error_handlers
 from app.api.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine_from_settings, create_session_factory
-from app.domains.resume_ats.prompts import register_prompts
+from app.domains.resume_ats.domain import wire_resume_ats
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -22,8 +21,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         debug=settings.debug,
     )
 
-    # Error envelope per docs/07_API_Design.md §10.
-    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    # Error envelopes per docs/07_API_Design.md §10 (HTTP, validation,
+    # and unhandled exceptions).
+    register_error_handlers(app)
+    app.state.settings = settings
 
     # Database foundation (docs/05_Database_Design.md, docs/09 §4).
     engine = create_engine_from_settings(settings)
@@ -34,7 +35,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Shared AI service layer (docs/09_Migration_Analysis.md §3.3).
     # Run records are persisted from day one via the DB-backed store.
     ai_core = create_ai_core(run_store=SQLAlchemyRunRecordStore(session_factory))
-    register_prompts(ai_core.prompts)
+    # Resume ATS domain wiring: prompts, provider, model config, workflow.
+    wire_resume_ats(ai_core, settings)
     app.state.ai_core = ai_core
 
     app.add_middleware(
