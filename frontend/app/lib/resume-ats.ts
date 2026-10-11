@@ -1,4 +1,5 @@
-import { API_URL, errorMessage } from "./api";
+import { API_URL, ApiError, errorMessage } from "./api";
+import { getSupabase } from "./supabase";
 
 export interface UploadResumeData {
   resume_id: string;
@@ -26,17 +27,32 @@ interface Envelope<T> {
 
 export const SUPPORTED_EXTENSIONS = [".pdf", ".docx", ".txt"] as const;
 
+async function authHeaders(): Promise<Record<string, string>> {
+  const supabase = getSupabase();
+  if (supabase === null) {
+    return {};
+  }
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function requireOk<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    throw new ApiError(await errorMessage(response), response.status);
+  }
+  return (await response.json()) as T;
+}
+
 export async function uploadResume(file: File): Promise<UploadResumeData> {
   const formData = new FormData();
   formData.append("file", file);
   const response = await fetch(`${API_URL}/api/v1/resumes`, {
     method: "POST",
     body: formData,
+    headers: await authHeaders(),
   });
-  if (!response.ok) {
-    throw new Error(await errorMessage(response));
-  }
-  const body = (await response.json()) as Envelope<UploadResumeData>;
+  const body = await requireOk<Envelope<UploadResumeData>>(response);
   return body.data;
 }
 
@@ -48,14 +64,14 @@ export async function runAtsAnalysis(
     `${API_URL}/api/v1/resumes/${resumeId}/ats-analysis`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(await authHeaders()),
+      },
       body: JSON.stringify({ job_description: jobDescription }),
     },
   );
-  if (!response.ok) {
-    throw new Error(await errorMessage(response));
-  }
-  const body = (await response.json()) as Envelope<AtsAnalysisData>;
+  const body = await requireOk<Envelope<AtsAnalysisData>>(response);
   return body.data;
 }
 
@@ -64,9 +80,10 @@ export async function downloadTailoredResumeDocx(
 ): Promise<Blob> {
   const response = await fetch(
     `${API_URL}/api/v1/analyses/${analysisId}/tailored-resume.docx`,
+    { headers: await authHeaders() },
   );
   if (!response.ok) {
-    throw new Error(await errorMessage(response));
+    throw new ApiError(await errorMessage(response), response.status);
   }
   return response.blob();
 }

@@ -2,12 +2,16 @@
 
 Endpoints per `docs/07_API_Design.md` §13, mounted under `/api/v1`:
 upload, resume detail, ATS analysis, and tailored-resume DOCX download.
+All endpoints are protected: they require a valid Supabase JWT
+(`docs/07_API_Design.md` §6) and are scoped to the authenticated user —
+cross-user access yields 404, identical to a missing resource.
 Synchronous endpoints: file IO and LLM calls run in the FastAPI
 threadpool. All responses use the platform envelope
 (`docs/07_API_Design.md` §10); errors map to:
 
 - 400 invalid request body / job description
-- 404 unknown resume or analysis
+- 401 missing, invalid, or expired authentication token
+- 404 unknown resume or analysis (including other users' resources)
 - 409 analysis exists but has no tailored resume to download
 - 413 file too large (5 MB default)
 - 415 unsupported file type
@@ -24,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.ai_core import AICore, get_ai_core
 from app.core.config import Settings, get_app_settings
+from app.core.security import AuthUser, get_current_user
 from app.db.session import get_db
 from app.domains.resume_ats import service
 from app.domains.resume_ats.schemas import (
@@ -87,6 +92,7 @@ def upload_resume(
     file: UploadFile = File(...),
     session: Session = Depends(get_db),
     settings: Settings = Depends(get_app_settings),
+    user: AuthUser = Depends(get_current_user),
 ) -> UploadResumeResponse:
     data = _read_upload(
         file, settings.max_upload_size_mb * 1024 * 1024
@@ -95,6 +101,7 @@ def upload_resume(
     try:
         resume = service.upload_resume(
             session,
+            user_id=user.id,
             file_name=file.filename or "resume",
             data=data,
             settings=settings,
@@ -120,12 +127,14 @@ def upload_resume(
 
 @router.get("/{resume_id}", response_model=ResumeDetailResponse)
 def get_resume(
-    resume_id: str, session: Session = Depends(get_db)
+    resume_id: str,
+    session: Session = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
 ) -> ResumeDetailResponse:
     if not _is_uuid(resume_id):
         raise _error(404, "Resume not found.")
     try:
-        resume = service.get_resume(session, resume_id)
+        resume = service.get_resume(session, resume_id, user.id)
     except ResumeNotFoundError as exc:
         raise _error(404, "Resume not found.") from exc
 
@@ -157,6 +166,7 @@ def analyze_resume(
     body: AtsAnalysisApiRequest,
     session: Session = Depends(get_db),
     ai_core: AICore = Depends(get_ai_core),
+    user: AuthUser = Depends(get_current_user),
 ) -> AnalysisResponse:
     if not _is_uuid(resume_id):
         raise _error(404, "Resume not found.")
@@ -166,6 +176,7 @@ def analyze_resume(
             session,
             resume_id=resume_id,
             job_description=body.job_description.strip(),
+            user_id=user.id,
         )
     except ResumeNotFoundError as exc:
         raise _error(404, "Resume not found.") from exc
@@ -203,12 +214,16 @@ def analyze_resume(
     },
 )
 def download_tailored_resume(
-    analysis_id: str, session: Session = Depends(get_db)
+    analysis_id: str,
+    session: Session = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
 ) -> Response:
     if not _is_uuid(analysis_id):
         raise _error(404, "Analysis not found.")
     try:
-        file_name, content = service.tailored_resume_docx(session, analysis_id)
+        file_name, content = service.tailored_resume_docx(
+            session, analysis_id, user.id
+        )
     except AnalysisNotFoundError as exc:
         raise _error(404, "Analysis not found.") from exc
     except AnalysisNotReadyError as exc:

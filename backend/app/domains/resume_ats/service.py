@@ -6,6 +6,11 @@ execution (deterministic engine + AI workflow, persisted as both an
 analysis record and an ai_core run record), and DOCX rendering of the
 tailored resume.
 
+Every function is user-scoped: callers pass the authenticated user id
+(from `app.core.security.get_current_user`), all reads filter on it,
+and ownership violations surface as the same not-found error as missing
+records (no existence leak).
+
 Design rules honored (`docs/09_Migration_Analysis.md` §3.3):
 - The deterministic engine owns score and keyword lists; AI nodes never
   compute them.
@@ -26,18 +31,13 @@ from app.services import documents
 
 DOMAIN = "resume_ats"
 
-# No auth layer exists yet: every row currently belongs to this shared
-# anonymous identity. Replaced by the authenticated user id when
-# Supabase Auth lands.
-ANONYMOUS_USER_ID = "00000000-0000-0000-0000-000000000000"
-
 
 class ResumeNotFoundError(KeyError):
-    """No resume exists under the requested id."""
+    """No resume exists under the requested id for the requesting user."""
 
 
 class AnalysisNotFoundError(KeyError):
-    """No analysis exists under the requested id."""
+    """No analysis exists under the requested id for the requesting user."""
 
 
 class ProviderNotAvailableError(RuntimeError):
@@ -55,6 +55,7 @@ class AnalysisNotReadyError(ValueError):
 def upload_resume(
     session: Session,
     *,
+    user_id: str,
     file_name: str,
     data: bytes,
     settings: Settings | None = None,
@@ -68,7 +69,7 @@ def upload_resume(
         file_name, data, max_size_bytes=settings.max_upload_size_mb * 1024 * 1024
     )
     resume = Resume(
-        user_id=ANONYMOUS_USER_ID,
+        user_id=user_id,
         file_name=file_name,
         extracted_text=text,
         file_size_bytes=len(data),
@@ -79,8 +80,17 @@ def upload_resume(
     return resume
 
 
-def get_resume(session: Session, resume_id: str) -> Resume:
-    resume = session.get(Resume, resume_id)
+def get_resume(session: Session, resume_id: str, user_id: str) -> Resume:
+    """Return the resume owned by `user_id`, or raise ResumeNotFoundError.
+
+    A resume that exists but belongs to another user is indistinguishable
+    from a missing one at this layer — no resource-existence leak.
+    """
+    resume = (
+        session.query(Resume)
+        .filter(Resume.id == resume_id, Resume.user_id == user_id)
+        .first()
+    )
     if resume is None:
         raise ResumeNotFoundError(resume_id)
     return resume
@@ -92,15 +102,16 @@ def run_ats_analysis(
     *,
     resume_id: str,
     job_description: str,
-    user_id: str = ANONYMOUS_USER_ID,
+    user_id: str,
 ) -> AtsAnalysisRecord:
-    """Run the ATS workflow for a resume against a job description.
+    """Run the ATS workflow for a user-owned resume against a job description.
 
     The deterministic engine computes score/keywords; the AI nodes fill
     the remaining three sections through the configured provider. Both
-    the analysis record and the ai_core run record are persisted.
+    the analysis record and the ai_core run record are persisted,
+    scoped to `user_id`.
     """
-    resume = get_resume(session, resume_id)
+    resume = get_resume(session, resume_id, user_id)
 
     try:
         run = ai_core.workflows.run(
@@ -142,8 +153,19 @@ def run_ats_analysis(
     return record
 
 
-def get_analysis(session: Session, analysis_id: str) -> AtsAnalysisRecord:
-    analysis = session.get(AtsAnalysisRecord, analysis_id)
+def get_analysis(
+    session: Session, analysis_id: str, user_id: str
+) -> AtsAnalysisRecord:
+    """Return the analysis owned by `user_id`, or raise AnalysisNotFoundError."""
+    analysis = (
+        session.query(AtsAnalysisRecord)
+        .join(Resume, Resume.id == AtsAnalysisRecord.resume_id)
+        .filter(
+            AtsAnalysisRecord.id == analysis_id,
+            Resume.user_id == user_id,
+        )
+        .first()
+    )
     if analysis is None:
         raise AnalysisNotFoundError(analysis_id)
     return analysis
@@ -159,14 +181,14 @@ def latest_analysis(session: Session, resume_id: str) -> AtsAnalysisRecord | Non
 
 
 def tailored_resume_docx(
-    session: Session, analysis_id: str
+    session: Session, analysis_id: str, user_id: str
 ) -> tuple[str, bytes]:
     """Render the tailored resume of an analysis as DOCX bytes.
 
     Returns (file_name, bytes). Raises AnalysisNotReadyError when the
     analysis has no tailored resume (e.g. the AI run failed).
     """
-    analysis = get_analysis(session, analysis_id)
+    analysis = get_analysis(session, analysis_id, user_id)
     if not analysis.tailored_resume:
         raise AnalysisNotReadyError(analysis_id)
     return (

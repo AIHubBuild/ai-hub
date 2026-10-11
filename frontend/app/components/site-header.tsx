@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "./auth/auth-provider";
 
 const NAV_LINKS = [
   { href: "/", label: "Dashboard", match: (pathname: string) => pathname === "/" },
@@ -14,6 +15,7 @@ const NAV_LINKS = [
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const { session, loading, configured, signOut } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
@@ -46,6 +48,33 @@ export function SiteHeader() {
               </li>
             );
           })}
+          <li>
+            {loading ? null : session !== null ? (
+              <span className="flex items-center gap-3">
+                <span className="max-w-40 truncate text-zinc-600 dark:text-zinc-400">
+                  {session.user.email}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => signOut()}
+                  className="text-zinc-600 transition-colors hover:text-zinc-900 focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-zinc-500 dark:text-zinc-400 dark:hover:text-zinc-50"
+                >
+                  Sign out
+                </button>
+              </span>
+            ) : (
+              <Link
+                href="/login"
+                className={
+                  configured
+                    ? "font-medium text-zinc-900 dark:text-zinc-50"
+                    : "text-zinc-400 dark:text-zinc-500"
+                }
+              >
+                Sign in
+              </Link>
+            )}
+          </li>
         </ul>
       </nav>
     </header>

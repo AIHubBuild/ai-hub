@@ -1,6 +1,8 @@
 """Tests for the JWT validation dependency (core/security.py).
 
-Phase 1: Supabase-style HS256 access tokens, per docs/07_API_Design.md §6.
+Supabase-style HS256 access tokens, per docs/07_API_Design.md §6.
+The app is built with explicit Settings (including the JWT secret),
+matching how the application binds configuration to app.state.
 """
 
 import time
@@ -9,7 +11,7 @@ import jwt
 from fastapi import Depends
 from fastapi.testclient import TestClient
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
 from app.core.security import AuthUser, get_current_user
 from app.main import create_app
 
@@ -19,17 +21,18 @@ WRONG_SECRET = "wrong-jwt-secret-0123456789abcdef0123456789abcdef0123456789abcde
 
 def make_client(secret: str | None = TEST_SECRET) -> TestClient:
     """Build the real app (with its exception handlers) plus a test-only
-    protected route, overriding settings to use the test secret."""
-    app = create_app()
+    protected route, using explicit Settings bound to app.state."""
+    app = create_app(
+        Settings(
+            supabase_jwt_secret=secret or "",
+            database_url="sqlite://",
+        )
+    )
 
     @app.get("/protected")
     async def protected(user: AuthUser = Depends(get_current_user)):
         return {"success": True, "data": {"id": user.id, "email": user.email}}
 
-    async def settings_override() -> Settings:
-        return Settings(supabase_jwt_secret=secret or "")
-
-    app.dependency_overrides[get_settings] = settings_override
     return TestClient(app)
 
 

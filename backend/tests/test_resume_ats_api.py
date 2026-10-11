@@ -3,8 +3,16 @@
 The OpenAI provider is replaced with a scripted test double through the
 same ai_core wiring the application uses — no network calls. The
 deterministic engine (not the double) owns the ATS score.
+
+All endpoints are protected by Supabase-style HS256 JWTs validated
+against the app-bound `supabase_jwt_secret`; tokens here are minted
+with PyJWT exactly as Supabase would sign them. Cross-user isolation
+is exercised throughout with two distinct user identities.
 """
 
+import time
+
+import jwt
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -17,12 +25,11 @@ from app.ai_core import (
 from app.ai_core.providers.openai import ProviderError
 from app.ai_core.run_records_db import SQLAlchemyRunRecordStore
 from app.core.config import Settings
-from app.domains.resume_ats.domain import wire_resume_ats
 from app.domains.resume_ats.prompts import register_prompts
 from app.domains.resume_ats.workflow import ATS_WORKFLOW_ID, build_ats_workflow
 from app.main import create_app
 from app.models import Base
-from app.models.resume import AtsAnalysisRecord
+from app.models.resume import AtsAnalysisRecord, Resume
 
 RESUME_TEXT = (
     "Jane Doe\njane@example.com\n"
@@ -40,6 +47,11 @@ FAKE_RESPONSES = [
     "Tailored cover letter content.",
 ]
 
+TEST_SECRET = "test-jwt-secret-0123456789abcdef0123456789abcdef0123456789abcdef"
+
+USER_A = "550e8400-e29b-41d4-a716-446655440000"
+USER_B = "660e8400-e29b-41d4-a716-446655440001"
+
 
 class FakeProvider:
     def __init__(self, responses=None, error=None):
@@ -56,10 +68,24 @@ class FakeProvider:
         return self.responses.pop(0)
 
 
+def make_token(user_id: str = USER_A, *, email: str = "alex@example.com") -> str:
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "exp": int(time.time()) + 3600,
+    }
+    return jwt.encode(payload, TEST_SECRET, algorithm="HS256")
+
+
+def auth_headers(user_id: str = USER_A) -> dict[str, str]:
+    return {"Authorization": f"Bearer {make_token(user_id)}"}
+
+
 def make_settings(tmp_path, **overrides) -> Settings:
     values = dict(
         database_url=f"sqlite:///{tmp_path / 'test.db'}",
         openai_api_key="test-key",
+        supabase_jwt_secret=TEST_SECRET,
     )
     values.update(overrides)
     return Settings(**values)
@@ -94,11 +120,69 @@ def client(tmp_path):
         yield test_client, app
 
 
-def upload_resume(client: TestClient, content: str = RESUME_TEXT, filename="resume.txt"):
+def upload_resume(
+    client: TestClient,
+    content: str = RESUME_TEXT,
+    filename="resume.txt",
+    user_id: str = USER_A,
+):
     return client.post(
         "/api/v1/resumes",
         files={"file": (filename, content.encode("utf-8"), "text/plain")},
+        headers=auth_headers(user_id),
     )
+
+
+# ---------------------------------------------------------------
+# Authentication requirements
+# ---------------------------------------------------------------
+
+
+def test_upload_requires_authentication(client):
+    test_client, _ = client
+    response = test_client.post(
+        "/api/v1/resumes",
+        files={"file": ("resume.txt", RESUME_TEXT.encode("utf-8"), "text/plain")},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["success"] is False
+
+
+def test_resume_detail_requires_authentication(client):
+    test_client, _ = client
+    response = test_client.get("/api/v1/resumes/550e8400-e29b-41d4-a716-446655440000")
+
+    assert response.status_code == 401
+
+
+def test_analysis_requires_authentication(client):
+    test_client, _ = client
+    response = test_client.post(
+        "/api/v1/resumes/550e8400-e29b-41d4-a716-446655440000/ats-analysis",
+        json={"job_description": JOB_DESCRIPTION},
+    )
+
+    assert response.status_code == 401
+
+
+def test_download_requires_authentication(client):
+    test_client, _ = client
+    response = test_client.get(
+        "/api/v1/analyses/550e8400-e29b-41d4-a716-446655440000/tailored-resume.docx"
+    )
+
+    assert response.status_code == 401
+
+
+def test_invalid_token_is_rejected(client):
+    test_client, _ = client
+    response = test_client.get(
+        "/api/v1/resumes/550e8400-e29b-41d4-a716-446655440000",
+        headers={"Authorization": "Bearer not-a-jwt"},
+    )
+
+    assert response.status_code == 401
 
 
 # ---------------------------------------------------------------
@@ -116,6 +200,17 @@ def test_upload_txt_resume(client):
     assert body["data"]["file_name"] == "resume.txt"
     assert body["data"]["resume_id"]
     assert body["data"]["extracted_characters"] > 0
+
+
+def test_upload_persists_authenticated_user_id(client):
+    test_client, app = client
+    response = upload_resume(test_client, user_id=USER_B)
+    resume_id = response.json()["data"]["resume_id"]
+
+    with app.state.session_factory() as session:
+        resume = session.get(Resume, resume_id)
+
+    assert resume.user_id == USER_B
 
 
 def test_upload_rejects_unsupported_extension(client):
@@ -160,7 +255,9 @@ def test_get_resume_returns_metadata_and_no_analysis(client):
     test_client, _ = client
     resume_id = upload_resume(test_client).json()["data"]["resume_id"]
 
-    response = test_client.get(f"/api/v1/resumes/{resume_id}")
+    response = test_client.get(
+        f"/api/v1/resumes/{resume_id}", headers=auth_headers()
+    )
 
     assert response.status_code == 200
     data = response.json()["data"]
@@ -171,7 +268,10 @@ def test_get_resume_returns_metadata_and_no_analysis(client):
 
 def test_get_resume_unknown_returns_404(client):
     test_client, _ = client
-    response = test_client.get("/api/v1/resumes/550e8400-e29b-41d4-a716-446655440000")
+    response = test_client.get(
+        "/api/v1/resumes/550e8400-e29b-41d4-a716-446655440000",
+        headers=auth_headers(),
+    )
 
     assert response.status_code == 404
     assert response.json()["success"] is False
@@ -179,27 +279,24 @@ def test_get_resume_unknown_returns_404(client):
 
 def test_get_resume_malformed_id_returns_404_not_500(client):
     test_client, _ = client
-    response = test_client.get("/api/v1/resumes/not-a-uuid")
+    response = test_client.get(
+        "/api/v1/resumes/not-a-uuid", headers=auth_headers()
+    )
 
     assert response.status_code == 404
     assert response.json()["success"] is False
 
 
-def test_analysis_malformed_resume_id_returns_404_not_500(client):
+def test_get_resume_of_other_user_returns_404(client):
     test_client, _ = client
-    response = test_client.post(
-        "/api/v1/resumes/not-a-uuid/ats-analysis",
-        json={"job_description": JOB_DESCRIPTION},
+    resume_id = upload_resume(test_client, user_id=USER_A).json()["data"]["resume_id"]
+
+    response = test_client.get(
+        f"/api/v1/resumes/{resume_id}", headers=auth_headers(USER_B)
     )
 
     assert response.status_code == 404
-
-
-def test_download_malformed_analysis_id_returns_404_not_500(client):
-    test_client, _ = client
-    response = test_client.get("/api/v1/analyses/not-a-uuid/tailored-resume.docx")
-
-    assert response.status_code == 404
+    assert response.json()["success"] is False
 
 
 # ---------------------------------------------------------------
@@ -208,12 +305,13 @@ def test_download_malformed_analysis_id_returns_404_not_500(client):
 
 
 def test_analysis_runs_workflow_and_returns_six_sections(client):
-    test_client, app = client
+    test_client, _ = client
     resume_id = upload_resume(test_client).json()["data"]["resume_id"]
 
     response = test_client.post(
         f"/api/v1/resumes/{resume_id}/ats-analysis",
         json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(),
     )
 
     assert response.status_code == 201
@@ -235,13 +333,14 @@ def test_analysis_runs_workflow_and_returns_six_sections(client):
     assert data["run_id"]
 
 
-def test_analysis_persists_run_record(client):
+def test_analysis_persists_run_record_for_authenticated_user(client):
     test_client, app = client
-    resume_id = upload_resume(test_client).json()["data"]["resume_id"]
+    resume_id = upload_resume(test_client, user_id=USER_A).json()["data"]["resume_id"]
 
     response = test_client.post(
         f"/api/v1/resumes/{resume_id}/ats-analysis",
         json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(USER_A),
     )
     run_id = response.json()["data"]["run_id"]
 
@@ -249,6 +348,7 @@ def test_analysis_persists_run_record(client):
     assert record is not None
     assert record.workflow_id == ATS_WORKFLOW_ID
     assert record.domain == "resume_ats"
+    assert record.user_id == USER_A
     assert record.status.value == "success"
     assert record.input_state["resume_text"] == RESUME_TEXT
 
@@ -258,9 +358,25 @@ def test_analysis_unknown_resume_returns_404(client):
     response = test_client.post(
         "/api/v1/resumes/550e8400-e29b-41d4-a716-446655440000/ats-analysis",
         json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(),
     )
 
     assert response.status_code == 404
+
+
+def test_analysis_of_other_users_resume_returns_404(client):
+    test_client, app = client
+    resume_id = upload_resume(test_client, user_id=USER_A).json()["data"]["resume_id"]
+
+    response = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(USER_B),
+    )
+
+    assert response.status_code == 404
+    with app.state.session_factory() as session:
+        assert session.query(AtsAnalysisRecord).count() == 0
 
 
 def test_analysis_rejects_empty_job_description(client):
@@ -270,6 +386,7 @@ def test_analysis_rejects_empty_job_description(client):
     response = test_client.post(
         f"/api/v1/resumes/{resume_id}/ats-analysis",
         json={"job_description": "   "},
+        headers=auth_headers(),
     )
 
     assert response.status_code == 422
@@ -286,6 +403,7 @@ def test_analysis_provider_failure_returns_502_and_error_run_record(tmp_path):
         response = test_client.post(
             f"/api/v1/resumes/{resume_id}/ats-analysis",
             json={"job_description": JOB_DESCRIPTION},
+            headers=auth_headers(),
         )
 
     assert response.status_code == 502
@@ -300,6 +418,7 @@ def test_analysis_without_provider_returns_503(tmp_path):
         response = test_client.post(
             f"/api/v1/resumes/{resume_id}/ats-analysis",
             json={"job_description": JOB_DESCRIPTION},
+            headers=auth_headers(),
         )
 
     assert response.status_code == 503
@@ -309,8 +428,6 @@ def test_analysis_without_provider_returns_503(tmp_path):
 
 def test_no_provider_means_no_fabricated_analysis_or_run_record(tmp_path):
     """A 503 response must not create analysis rows or run records."""
-    from app.ai_core.run_records import RunStatus
-    from app.domains.resume_ats.service import ANONYMOUS_USER_ID
     from app.models.resume import AtsAnalysisRecord
 
     settings = make_settings(tmp_path, openai_api_key="")
@@ -320,18 +437,18 @@ def test_no_provider_means_no_fabricated_analysis_or_run_record(tmp_path):
         response = test_client.post(
             f"/api/v1/resumes/{resume_id}/ats-analysis",
             json={"job_description": JOB_DESCRIPTION},
+            headers=auth_headers(),
         )
         assert response.status_code == 503
 
     with app.state.session_factory() as session:
         assert session.query(AtsAnalysisRecord).count() == 0
-    assert app.state.ai_core.run_records.list_for_user(ANONYMOUS_USER_ID) == []
+    assert app.state.ai_core.run_records.list_for_user(USER_A) == []
 
 
 def test_provider_failure_creates_no_analysis_row_but_error_run_record(tmp_path):
     """A provider failure returns 502: no analysis data, error record kept."""
     from app.ai_core.run_records import RunStatus
-    from app.domains.resume_ats.service import ANONYMOUS_USER_ID
     from app.models.resume import AtsAnalysisRecord
 
     settings = make_settings(tmp_path)
@@ -344,13 +461,14 @@ def test_provider_failure_creates_no_analysis_row_but_error_run_record(tmp_path)
         response = test_client.post(
             f"/api/v1/resumes/{resume_id}/ats-analysis",
             json={"job_description": JOB_DESCRIPTION},
+            headers=auth_headers(),
         )
         assert response.status_code == 502
         assert response.json()["success"] is False
 
     with app.state.session_factory() as session:
         assert session.query(AtsAnalysisRecord).count() == 0
-    records = app.state.ai_core.run_records.list_for_user(ANONYMOUS_USER_ID)
+    records = app.state.ai_core.run_records.list_for_user(USER_A)
     assert len(records) == 1
     assert records[0].status is RunStatus.ERROR
 
@@ -376,6 +494,7 @@ def test_upload_docx_through_api(client):
                 ".wordprocessingml.document",
             )
         },
+        headers=auth_headers(),
     )
 
     assert response.status_code == 201
@@ -407,10 +526,12 @@ def test_download_tailored_resume_docx(client):
     analysis_id = test_client.post(
         f"/api/v1/resumes/{resume_id}/ats-analysis",
         json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(),
     ).json()["data"]["analysis_id"]
 
     response = test_client.get(
-        f"/api/v1/analyses/{analysis_id}/tailored-resume.docx"
+        f"/api/v1/analyses/{analysis_id}/tailored-resume.docx",
+        headers=auth_headers(),
     )
 
     assert response.status_code == 200
@@ -428,7 +549,25 @@ def test_download_tailored_resume_docx(client):
 def test_download_unknown_analysis_returns_404(client):
     test_client, _ = client
     response = test_client.get(
-        "/api/v1/analyses/550e8400-e29b-41d4-a716-446655440000/tailored-resume.docx"
+        "/api/v1/analyses/550e8400-e29b-41d4-a716-446655440000/tailored-resume.docx",
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 404
+
+
+def test_download_other_users_analysis_returns_404(client):
+    test_client, _ = client
+    resume_id = upload_resume(test_client, user_id=USER_A).json()["data"]["resume_id"]
+    analysis_id = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(USER_A),
+    ).json()["data"]["analysis_id"]
+
+    response = test_client.get(
+        f"/api/v1/analyses/{analysis_id}/tailored-resume.docx",
+        headers=auth_headers(USER_B),
     )
 
     assert response.status_code == 404
@@ -453,7 +592,18 @@ def test_download_analysis_without_tailored_resume_returns_409(client):
         analysis_id = record.id
 
     response = test_client.get(
-        f"/api/v1/analyses/{analysis_id}/tailored-resume.docx"
+        f"/api/v1/analyses/{analysis_id}/tailored-resume.docx",
+        headers=auth_headers(),
     )
 
     assert response.status_code == 409
+
+
+def test_download_malformed_analysis_id_returns_404_not_500(client):
+    test_client, _ = client
+    response = test_client.get(
+        "/api/v1/analyses/not-a-uuid/tailored-resume.docx",
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 404

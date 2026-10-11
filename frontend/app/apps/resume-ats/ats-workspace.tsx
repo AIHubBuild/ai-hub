@@ -1,6 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
+import { useAuth } from "../../components/auth/auth-provider";
+import { ApiError } from "../../lib/api";
 import {
   AtsAnalysisData,
   SUPPORTED_EXTENSIONS,
@@ -14,8 +17,10 @@ type Stage = "idle" | "uploading" | "analyzing" | "error" | "done";
 const ACCEPT = SUPPORTED_EXTENSIONS.join(",");
 
 export function AtsWorkspace() {
+  const { session, loading: authLoading } = useAuth();
   const [stage, setStage] = useState<Stage>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [errorIsAuth, setErrorIsAuth] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [jobDescription, setJobDescription] = useState("");
   const [result, setResult] = useState<AtsAnalysisData | null>(null);
@@ -36,6 +41,7 @@ export function AtsWorkspace() {
     }
 
     setError(null);
+    setErrorIsAuth(false);
     setResult(null);
     setStage("uploading");
     try {
@@ -48,6 +54,9 @@ export function AtsWorkspace() {
       setResult(analysis);
       setStage("done");
     } catch (caught) {
+      const isAuth =
+        caught instanceof ApiError && (caught.status === 401 || caught.status === 403);
+      setErrorIsAuth(isAuth);
       setError(caught instanceof Error ? caught.message : "Unexpected error.");
       setStage("error");
     }
@@ -77,12 +86,44 @@ export function AtsWorkspace() {
   function reset() {
     setStage("idle");
     setError(null);
+    setErrorIsAuth(false);
     setResult(null);
     setFileName(null);
     setJobDescription("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  }
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-48 items-center justify-center rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div
+          aria-hidden="true"
+          className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 dark:border-zinc-700 dark:border-t-zinc-50"
+        />
+      </div>
+    );
+  }
+
+  if (session === null) {
+    return (
+      <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-50">
+          Sign in to use the ATS Resume Assistant
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+          Your resume analyses and generated documents are private to your
+          account. Sign in to upload a resume and run an ATS analysis.
+        </p>
+        <Link
+          href="/login?redirect=/apps/resume-ats"
+          className="mt-5 inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:focus-visible:outline-zinc-50"
+        >
+          Sign in
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -177,18 +218,27 @@ export function AtsWorkspace() {
         {stage === "error" && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
             <h3 className="text-sm font-medium text-red-800 dark:text-red-300">
-              Analysis failed
+              {errorIsAuth ? "Session expired" : "Analysis failed"}
             </h3>
             <p className="mt-1 text-sm leading-relaxed text-red-700 dark:text-red-400">
               {error}
             </p>
-            <button
-              type="button"
-              onClick={reset}
-              className="mt-3 inline-flex items-center rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900"
-            >
-              Try again
-            </button>
+            {errorIsAuth ? (
+              <Link
+                href="/login?redirect=/apps/resume-ats"
+                className="mt-3 inline-flex items-center rounded-lg bg-red-700 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:bg-red-300 dark:text-red-950 dark:hover:bg-red-200"
+              >
+                Sign in again
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={reset}
+                className="mt-3 inline-flex items-center rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900"
+              >
+                Try again
+              </button>
+            )}
           </div>
         )}
 

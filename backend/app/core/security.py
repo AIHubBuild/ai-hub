@@ -1,7 +1,7 @@
 """Authentication & authorization primitives.
 
-Phase 1 slice: validation of Supabase-issued JWT access tokens, per
-`docs/07_API_Design.md` §6 (backend validates JWTs for protected
+Validates Supabase-issued JWT access tokens for protected endpoints,
+per `docs/07_API_Design.md` §6 (backend validates JWTs for protected
 endpoints) and `docs/04_System_Architecture.md` §10. Tokens are
 HS256-signed with the project's JWT secret; the ``sub`` claim carries
 the Supabase user UUID.
@@ -12,7 +12,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, get_app_settings
 from app.core.secrets import SecretError, require_secret
 
 AUTH_ALGORITHMS = ["HS256"]
@@ -39,7 +39,7 @@ def _auth_error(message: str) -> HTTPException:
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_app_settings),
 ) -> AuthUser:
     """FastAPI dependency: validate the Bearer token and return the user.
 

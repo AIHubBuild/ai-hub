@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AuthProvider } from "./components/auth/auth-provider";
 import { SiteFooter } from "./components/site-footer";
 import { SiteHeader } from "./components/site-header";
 import "./globals.css";
@@ -32,11 +33,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        <SiteHeader />
-        <div id="main-content" className="flex flex-1 flex-col">
-          {children}
-        </div>
-        <SiteFooter />
+        <AuthProvider>
+          <SiteHeader />
+          <div id="main-content" className="flex flex-1 flex-col">
+            {children}
+          </div>
+          <SiteFooter />
+        </AuthProvider>
       </body>
     </html>
   );

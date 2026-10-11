@@ -6,6 +6,16 @@ export interface ErrorEnvelope {
   message: string;
 }
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 export async function errorMessage(response: Response): Promise<string> {
   try {
     const body = (await response.json()) as Partial<ErrorEnvelope>;
