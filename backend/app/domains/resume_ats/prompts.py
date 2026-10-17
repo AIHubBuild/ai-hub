@@ -585,14 +585,28 @@ PROMPT_TEMPLATES.extend(
 
 _TAILORED_RESUME_V5_STYLE = (
     _TAILORED_RESUME_V4_STYLE
-    + "\n\n"
+    + "\n"
+    "- Include Projects, Certifications, or Education only when the master "
+    "resume contains that section. Never create a new section.\n"
+    "- A certification proves only that certification. Do not infer incident "
+    "management, change control, SLA work, or other responsibilities from it.\n"
+    "\n"
     "REVISION PASS:\n"
     "{revision_section}"
 )
 
 _COVER_LETTER_V5_STYLE = (
     _COVER_LETTER_V4_STYLE
-    + "\n\n"
+    + "\n"
+    "- A certification proves only that certification. Do not infer incident "
+    "management, change control, SLA work, or other responsibilities from it.\n"
+    "\n"
+    "MASTER RESUME (SOURCE OF TRUTH):\n"
+    "{resume_text}\n"
+    "\n"
+    "Use the master resume to verify every claim. Do not add facts, tools, "
+    "projects, certifications, or responsibilities that are not present.\n"
+    "\n"
     "REVISION PASS:\n"
     "{revision_section}"
 )

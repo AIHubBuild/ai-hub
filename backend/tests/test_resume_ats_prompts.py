@@ -245,6 +245,7 @@ def test_latest_generation_prompts_render_revision_context():
     cover = COVER_LETTER_TEMPLATE_V5.user_template.format(
         tailored_resume="Jane Doe\nAdministered Active Directory.",
         job_description="Active Directory required.",
+        resume_text="Jane Doe\nAdministered Active Directory.",
         style_notes_section="",
         revision_section="REVISION PASS FOR THE COVER LETTER:\n- generic_phrase",
     )

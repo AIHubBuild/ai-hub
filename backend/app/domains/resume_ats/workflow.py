@@ -199,6 +199,7 @@ def _revision_instructions(
     document_name: str,
     current_draft: str,
     issues: list[Any],
+    source_resume: str,
 ) -> str:
     lines = [
         f"REVISION PASS FOR THE {document_name.upper()}:",
@@ -211,6 +212,9 @@ def _revision_instructions(
             "",
             "Current draft:",
             current_draft.strip(),
+            "",
+            "Verified source resume (use this to check every claim):",
+            source_resume.strip(),
             "",
             "Rewrite the draft so it fixes every problem above. Keep the same "
             "verified facts, employers, dates, qualifications, and achievements. "
@@ -243,6 +247,7 @@ def make_review_and_revise_node(
                     "tailored resume",
                     tailored_resume,
                     resume_review.issues,
+                    resume_source,
                 )
                 user = _render_prompt(
                     template, state, revision_section=revision
@@ -262,6 +267,7 @@ def make_review_and_revise_node(
                     "cover letter",
                     cover_letter,
                     cover_review.issues,
+                    resume_source,
                 )
                 cover_state = dict(state)
                 cover_state["tailored_resume"] = tailored_resume

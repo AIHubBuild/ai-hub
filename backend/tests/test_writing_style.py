@@ -96,14 +96,18 @@ def test_review_triggers_meaningful_revision_of_both_documents():
                 "Jane Doe\n"
                 "Professional Summary:\n"
                 "I am thrilled to apply \u2014 I have a solid foundation in IT "
-                "support and reduced downtime by 40%.\n"
+                "support and reduced downtime by 40%. I also follow SLA and "
+                "incident management processes.\n"
                 "Skills:\n"
                 "- Active Directory\n"
+                "Projects:\n"
+                "- Built a Wireshark network lab.\n"
             ),
             (
                 "Dear Hiring Manager,\n"
                 "I am writing to apply \u2014 my experience aligns closely with "
-                "your needs.\n"
+                "your needs. Following ITIL practices, I handled incident "
+                "management and SLA reporting.\n"
                 "Jane Doe\n"
             ),
             (
@@ -132,6 +136,11 @@ def test_review_triggers_meaningful_revision_of_both_documents():
     assert "I am thrilled to apply" not in (result.tailored_resume or "")
     assert "aligns closely with my experience" not in (result.cover_letter or "")
     assert "40%" not in (result.tailored_resume or "")
+    assert "Wireshark" not in (result.tailored_resume or "")
+    assert "Projects:" not in (result.tailored_resume or "")
+    assert "SLA" not in (result.tailored_resume or "")
+    assert "incident management" not in (result.cover_letter or "")
+    assert "SLA" not in (result.cover_letter or "")
     assert "400 users" in (result.tailored_resume or "")
     assert "400 users" in (result.cover_letter or "")
 
@@ -145,7 +154,11 @@ def test_review_triggers_meaningful_revision_of_both_documents():
     assert "REVISION PASS FOR THE COVER LETTER" in revision_prompts
     assert "generic_phrase" in revision_prompts
     assert "unsupported_metric" in revision_prompts
+    assert "unsupported_claim" in revision_prompts
+    assert "unsupported_section" in revision_prompts
     assert "I am thrilled to apply" in revision_prompts
+    assert "Wireshark" in revision_prompts
+    assert "SLA" in revision_prompts
     assert "Current draft:" in revision_prompts
 
 

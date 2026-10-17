@@ -128,6 +128,50 @@ def test_supported_metric_is_not_flagged():
     assert all(issue.code != "unsupported_metric" for issue in review.issues)
 
 
+def test_unsupported_project_section_is_flagged():
+    review = review_writing(
+        SOURCE,
+        "Jane Doe\nProjects:\n- Built a Wireshark network lab.\n",
+        CLEAN_COVER,
+    )
+
+    codes = [issue.code for issue in review.issues]
+    assert "unsupported_section" in codes
+    assert "unsupported_claim" in codes
+
+
+def test_unsupported_claim_term_is_flagged():
+    review = review_writing(
+        SOURCE,
+        CLEAN_TAILORED,
+        (
+            "Dear Hiring Manager,\n"
+            "I followed ITIL practices and handled incident management and SLA "
+            "reporting.\n"
+            "Jane Doe\n"
+        ),
+    )
+
+    codes = [issue.code for issue in review.issues]
+    assert "unsupported_claim" in codes
+    assert any("incident management" in issue.message for issue in review.issues)
+
+
+def test_supported_claims_are_not_flagged():
+    source = (
+        "Jane Doe\n"
+        "ITIL Foundation certified. Maintained SLA reporting and incident "
+        "management processes.\n"
+    )
+    review = review_writing(
+        source,
+        "Jane Doe\nMaintained SLA reporting and incident management.\n",
+        "Dear Hiring Manager,\nI maintained SLA reporting and incident management.\nJane Doe\n",
+    )
+
+    assert all(issue.code != "unsupported_claim" for issue in review.issues)
+
+
 def test_repeated_sentence_openers_are_flagged():
     text = (
         "Jane Doe.\n"

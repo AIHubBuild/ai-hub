@@ -157,6 +157,95 @@ def _metrics(text: str) -> set[str]:
     return {_normalize_metric(match.group(0)) for match in METRIC_PATTERN.finditer(text)}
 
 
+UNSUPPORTED_CLAIM_TERMS = [
+    "sla",
+    "service level agreement",
+    "incident management",
+    "change control",
+    "root cause",
+    "wireshark",
+    "traceroute",
+    "ping",
+    "nmap",
+    "itil",
+]
+
+_SECTION_SOURCE_PATTERNS = {
+    "projects": r"\bproject",
+    "certifications": r"\bcertif",
+    "education": r"\b(?:education|degree|university|bsc|msc|bachelor|master)\b",
+}
+
+
+def _has_term(text: str, term: str) -> bool:
+    return re.search(rf"\b{re.escape(term)}\b", text, flags=re.IGNORECASE) is not None
+
+
+def _source_supports_claim(term: str, resume_source: str) -> bool:
+    if term == "sla" and re.search(
+        r"\bservice level agreement\b", resume_source, re.IGNORECASE
+    ):
+        return True
+    if term == "service level agreement" and _has_term(resume_source, "sla"):
+        return True
+    return _has_term(resume_source, term)
+
+
+def _check_unsupported_claims(
+    doc_name: str,
+    text: str,
+    resume_source: str,
+    issues: list,
+) -> None:
+    for term in UNSUPPORTED_CLAIM_TERMS:
+        if _has_term(text, term) and not _source_supports_claim(term, resume_source):
+            issues.append(
+                WritingIssue(
+                    code="unsupported_claim",
+                    message=(
+                        f"{doc_name}: claim '{term}' is not supported by the "
+                        f"source resume; remove it or replace it with verified "
+                        f"evidence."
+                    ),
+                )
+            )
+
+
+def _check_unsupported_sections(
+    doc_name: str,
+    text: str,
+    resume_source: str,
+    issues: list,
+) -> None:
+    if doc_name != "Tailored resume":
+        return
+    plain = re.sub(r"[*#]+", "", text)
+    for heading, source_pattern in _SECTION_SOURCE_PATTERNS.items():
+        section_present = (
+            re.search(
+                rf"^\s*{heading}\s*:?\s*$",
+                plain,
+                flags=re.IGNORECASE | re.MULTILINE,
+            )
+            is not None
+        )
+        source_supports = (
+            re.search(source_pattern, resume_source, flags=re.IGNORECASE)
+            is not None
+        )
+        if section_present and not source_supports:
+            issues.append(
+                WritingIssue(
+                    code="unsupported_section",
+                    message=(
+                        f"{doc_name}: '{heading}' section is not supported by "
+                        f"the source resume; remove it or use only existing "
+                        f"content."
+                    ),
+                )
+            )
+
+
 def _check_unsupported_metrics(
     doc_name: str,
     text: str,
@@ -283,6 +372,8 @@ def review_writing(
         _check_generic_phrases(doc_name, text, issues)
         _check_em_dashes(doc_name, text, issues)
         _check_placeholders(doc_name, text, issues)
+        _check_unsupported_claims(doc_name, text, resume_source, issues)
+        _check_unsupported_sections(doc_name, text, resume_source, issues)
         _check_unsupported_metrics(doc_name, text, resume_source, issues)
         _check_repeated_openers(doc_name, text, issues)
 
