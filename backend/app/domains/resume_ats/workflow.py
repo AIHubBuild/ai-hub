@@ -38,6 +38,7 @@ from app.domains.resume_ats.schemas import AtsAnalysisResult, RequirementEvidenc
 from app.domains.resume_ats.writing_review import applicant_name, review_writing
 
 ATS_WORKFLOW_ID = "resume_ats/ats_pipeline"
+MAX_REVISION_PASSES = 2
 
 PROMPT_IDS = {
     "analysis": "resume_ats/ats_analysis",
@@ -220,6 +221,10 @@ def _revision_instructions(
             "verified facts, employers, dates, qualifications, and achievements. "
             "Do not add anything the source material does not support. Remove "
             "generic wording instead of replacing it with another cliche. "
+            "If an issue is unsupported_claim, unsupported_section, "
+            "unsupported_outcome, unsupported_metric, or "
+            "unsupported_time_reference, remove the unsupported statement "
+            "entirely instead of rephrasing it into another unsupported claim. "
             "Return only the revised document.",
         ]
     )
@@ -252,10 +257,12 @@ def make_review_and_revise_node(
         cover_letter = state.get("cover_letter", "")
 
         if tailored_resume:
-            resume_review = review_writing(
-                resume_source, tailored_resume, None
-            )
-            if not resume_review.passed:
+            for _ in range(MAX_REVISION_PASSES):
+                resume_review = review_writing(
+                    resume_source, tailored_resume, None
+                )
+                if resume_review.passed:
+                    break
                 template = prompts.get(PROMPT_IDS["tailored_resume"])
                 revision = _revision_instructions(
                     "tailored resume",
@@ -272,13 +279,15 @@ def make_review_and_revise_node(
                 tailored_resume = _ensure_applicant_name(
                     "tailored resume", tailored_resume, resume_source
                 )
-                updates["tailored_resume"] = tailored_resume
+            updates["tailored_resume"] = tailored_resume
 
         if cover_letter:
-            cover_review = review_writing(
-                resume_source, None, cover_letter
-            )
-            if not cover_review.passed:
+            for _ in range(MAX_REVISION_PASSES):
+                cover_review = review_writing(
+                    resume_source, None, cover_letter
+                )
+                if cover_review.passed:
+                    break
                 template = prompts.get(PROMPT_IDS["cover_letter"])
                 revision = _revision_instructions(
                     "cover letter",
@@ -297,7 +306,7 @@ def make_review_and_revise_node(
                 cover_letter = _ensure_applicant_name(
                     "cover letter", cover_letter, resume_source
                 )
-                updates["cover_letter"] = cover_letter
+            updates["cover_letter"] = cover_letter
 
         return updates
 

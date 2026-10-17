@@ -169,6 +169,29 @@ def test_review_triggers_meaningful_revision_of_both_documents():
     assert "Current draft:" in revision_prompts
 
 
+def test_second_revision_pass_removes_remaining_unsupported_outcome():
+    client = ScriptedClient(
+        [
+            "Add one specific PowerShell example.",
+            "Jane Doe\nI am thrilled to apply.",
+            "Dear Hiring Manager,\nI supported 400 users at Acme.\nJane Doe",
+            "Jane Doe\nI improved efficiency across the team.",
+            "Jane Doe\nSupported 400 users at Acme.",
+        ]
+    )
+    graph = build_ats_workflow(client, make_resume_registry())
+
+    state = graph.invoke({"resume_text": RESUME, "job_description": JOB})
+    result = result_from_state(state)
+
+    assert len(client.calls) == 5
+    assert "improved efficiency" not in (result.tailored_resume or "").lower()
+    review = review_writing(
+        RESUME, result.tailored_resume, result.cover_letter
+    )
+    assert review.passed is True, review.issues
+
+
 def test_revision_restores_missing_applicant_name():
     client = ScriptedClient(
         [
