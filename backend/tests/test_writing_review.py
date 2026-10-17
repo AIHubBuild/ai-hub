@@ -118,6 +118,16 @@ def test_unsupported_metric_is_flagged():
     assert any("40%" in issue.message for issue in review.issues)
 
 
+def test_windows_version_is_not_treated_as_device_metric():
+    review = review_writing(
+        SOURCE,
+        "Jane Doe\nSupported Windows 10/11 devices and endpoints.\n",
+        CLEAN_COVER,
+    )
+
+    assert all(issue.code != "unsupported_metric" for issue in review.issues)
+
+
 def test_supported_metric_is_not_flagged():
     review = review_writing(
         SOURCE,

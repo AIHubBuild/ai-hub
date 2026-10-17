@@ -35,7 +35,7 @@ from app.domains.resume_ats.job_description import (
 )
 from app.domains.resume_ats.matching import analyze_job_match
 from app.domains.resume_ats.schemas import AtsAnalysisResult, RequirementEvidence
-from app.domains.resume_ats.writing_review import review_writing
+from app.domains.resume_ats.writing_review import applicant_name, review_writing
 
 ATS_WORKFLOW_ID = "resume_ats/ats_pipeline"
 
@@ -226,6 +226,20 @@ def _revision_instructions(
     return "\n".join(lines)
 
 
+def _ensure_applicant_name(
+    document_name: str, text: str, resume_source: str
+) -> str:
+    name = applicant_name(resume_source)
+    if not name:
+        return text
+    first_name = name.split()[0]
+    if first_name.lower() in text.lower():
+        return text
+    if document_name == "cover letter":
+        return text.rstrip() + "\n\n" + name
+    return name + "\n\n" + text.lstrip()
+
+
 def make_review_and_revise_node(
     client: ChatClient, prompts: PromptRegistry
 ) -> Callable[[AtsWorkflowState], dict]:
@@ -255,6 +269,9 @@ def make_review_and_revise_node(
                 tailored_resume = normalize_writing(
                     client.complete(system=template.system, user=user)
                 )
+                tailored_resume = _ensure_applicant_name(
+                    "tailored resume", tailored_resume, resume_source
+                )
                 updates["tailored_resume"] = tailored_resume
 
         if cover_letter:
@@ -276,6 +293,9 @@ def make_review_and_revise_node(
                 )
                 cover_letter = normalize_writing(
                     client.complete(system=template.system, user=user)
+                )
+                cover_letter = _ensure_applicant_name(
+                    "cover letter", cover_letter, resume_source
                 )
                 updates["cover_letter"] = cover_letter
 

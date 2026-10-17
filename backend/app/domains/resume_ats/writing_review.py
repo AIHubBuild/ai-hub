@@ -92,7 +92,8 @@ _NON_NAME_WORDS = {
 }
 
 
-def _applicant_first_word(resume_source: str) -> str | None:
+def applicant_name(resume_source: str) -> str | None:
+    """Return the applicant's full name when the first line looks like one."""
     for line in resume_source.splitlines():
         stripped = line.strip()
         if not stripped:
@@ -109,8 +110,13 @@ def _applicant_first_word(resume_source: str) -> str | None:
             for word in words
         ):
             return None
-        return words[0]
+        return stripped
     return None
+
+
+def _applicant_first_word(resume_source: str) -> str | None:
+    name = applicant_name(resume_source)
+    return name.split()[0] if name else None
 
 
 def _check_generic_phrases(doc_name: str, text: str, issues: list) -> None:
@@ -143,7 +149,7 @@ def _check_em_dashes(doc_name: str, text: str, issues: list) -> None:
 
 METRIC_PATTERN = re.compile(
     r"\b\d+(?:\.\d+)?\s*\+?\s*(?:%|(?:percent|users?|clients?|sites?|"
-    r"tickets?|servers?|devices?|years?|months?)\b)",
+    r"tickets?|servers?|years?|months?)\b)",
     flags=re.IGNORECASE,
 )
 
