@@ -167,6 +167,40 @@ def test_unsupported_claim_term_is_flagged():
     assert any("incident management" in issue.message for issue in review.issues)
 
 
+def test_unsupported_outcome_is_flagged():
+    review = review_writing(
+        SOURCE,
+        "Jane Doe\nImproved response times and reduced user downtime.\n",
+        CLEAN_COVER,
+    )
+
+    assert any(issue.code == "unsupported_outcome" for issue in review.issues)
+
+
+def test_supported_outcome_is_not_flagged():
+    source = (
+        "Jane Doe\nAutomated user provisioning with PowerShell, reducing "
+        "manual setup time.\n"
+    )
+    review = review_writing(
+        source,
+        "Jane Doe\nReduced manual setup time with PowerShell automation.\n",
+        None,
+    )
+
+    assert all(issue.code != "unsupported_outcome" for issue in review.issues)
+
+
+def test_relative_time_claim_is_flagged():
+    review = review_writing(
+        SOURCE,
+        CLEAN_TAILORED,
+        "Dear Hiring Manager,\nI earned my ITIL Foundation this year.\nJane Doe\n",
+    )
+
+    assert any(issue.code == "unsupported_time_reference" for issue in review.issues)
+
+
 def test_supported_claims_are_not_flagged():
     source = (
         "Jane Doe\n"

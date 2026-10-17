@@ -167,6 +167,7 @@ UNSUPPORTED_CLAIM_TERMS = [
     "sla",
     "service level agreement",
     "incident management",
+    "incident resolution",
     "change control",
     "root cause",
     "wireshark",
@@ -174,7 +175,31 @@ UNSUPPORTED_CLAIM_TERMS = [
     "ping",
     "nmap",
     "itil",
+    "patch management",
+    "endpoint security",
+    "escalated support tickets",
+    "escalated tickets",
+    "second-line support",
+    "2nd line support",
 ]
+
+OUTCOME_GROUPS = {
+    "reduced": [
+        "reduce", "reduced", "reducing", "reduction",
+        "cut", "cutting", "lowered", "lowering", "decreased", "decreasing",
+    ],
+    "improved": [
+        "improve", "improved", "improving", "improvement",
+        "enhanced", "enhancing", "accelerated", "accelerating",
+        "faster", "streamlined", "streamlining",
+    ],
+    "downtime": ["downtime"],
+    "efficiency": ["efficiency", "efficient", "efficiently"],
+    "response time": ["response time", "response times"],
+    "saved": ["save", "saved", "saving"],
+}
+
+RELATIVE_TIME_TERMS = ["this year", "last year"]
 
 _SECTION_SOURCE_PATTERNS = {
     "projects": r"\bproject",
@@ -247,6 +272,48 @@ def _check_unsupported_sections(
                         f"{doc_name}: '{heading}' section is not supported by "
                         f"the source resume; remove it or use only existing "
                         f"content."
+                    ),
+                )
+            )
+
+
+def _check_unsupported_outcomes(
+    doc_name: str,
+    text: str,
+    resume_source: str,
+    issues: list,
+) -> None:
+    for label, variants in OUTCOME_GROUPS.items():
+        generated = any(_has_term(text, variant) for variant in variants)
+        supported = any(_has_term(resume_source, variant) for variant in variants)
+        if generated and not supported:
+            issues.append(
+                WritingIssue(
+                    code="unsupported_outcome",
+                    message=(
+                        f"{doc_name}: outcome '{label}' is not supported by "
+                        f"the source resume; remove it or use only a verified "
+                        f"result."
+                    ),
+                )
+            )
+
+
+def _check_relative_time_claims(
+    doc_name: str,
+    text: str,
+    resume_source: str,
+    issues: list,
+) -> None:
+    for term in RELATIVE_TIME_TERMS:
+        if _has_term(text, term) and not _has_term(resume_source, term):
+            issues.append(
+                WritingIssue(
+                    code="unsupported_time_reference",
+                    message=(
+                        f"{doc_name}: relative time reference '{term}' is not "
+                        f"supported by the source resume; use the actual date "
+                        f"or remove it."
                     ),
                 )
             )
@@ -380,6 +447,8 @@ def review_writing(
         _check_placeholders(doc_name, text, issues)
         _check_unsupported_claims(doc_name, text, resume_source, issues)
         _check_unsupported_sections(doc_name, text, resume_source, issues)
+        _check_unsupported_outcomes(doc_name, text, resume_source, issues)
+        _check_relative_time_claims(doc_name, text, resume_source, issues)
         _check_unsupported_metrics(doc_name, text, resume_source, issues)
         _check_repeated_openers(doc_name, text, issues)
 

@@ -96,8 +96,8 @@ def test_review_triggers_meaningful_revision_of_both_documents():
                 "Jane Doe\n"
                 "Professional Summary:\n"
                 "I am thrilled to apply \u2014 I have a solid foundation in IT "
-                "support and reduced downtime by 40%. I also follow SLA and "
-                "incident management processes.\n"
+                "support and reduced downtime by 40%. I improved response times "
+                "this year and follow SLA and incident management processes.\n"
                 "Skills:\n"
                 "- Active Directory\n"
                 "Projects:\n"
@@ -107,7 +107,8 @@ def test_review_triggers_meaningful_revision_of_both_documents():
                 "Dear Hiring Manager,\n"
                 "I am writing to apply \u2014 my experience aligns closely with "
                 "your needs. Following ITIL practices, I handled incident "
-                "management and SLA reporting.\n"
+                "management and SLA reporting, and I improved response times "
+                "this year.\n"
                 "Jane Doe\n"
             ),
             (
@@ -121,8 +122,8 @@ def test_review_triggers_meaningful_revision_of_both_documents():
             (
                 "Dear Hiring Manager,\n"
                 "I supported 400 users across Active Directory and Microsoft 365 "
-                "at Acme. I also automated user provisioning with PowerShell, "
-                "which reduced manual setup work during onboarding.\n"
+                "at Acme. I also automated user provisioning with PowerShell "
+                "during onboarding.\n"
                 "Jane Doe\n"
             ),
         ]
@@ -141,6 +142,10 @@ def test_review_triggers_meaningful_revision_of_both_documents():
     assert "SLA" not in (result.tailored_resume or "")
     assert "incident management" not in (result.cover_letter or "")
     assert "SLA" not in (result.cover_letter or "")
+    assert "this year" not in (result.tailored_resume or "")
+    assert "this year" not in (result.cover_letter or "")
+    assert "improved response times" not in (result.tailored_resume or "")
+    assert "improved response times" not in (result.cover_letter or "")
     assert "400 users" in (result.tailored_resume or "")
     assert "400 users" in (result.cover_letter or "")
 
@@ -156,6 +161,8 @@ def test_review_triggers_meaningful_revision_of_both_documents():
     assert "unsupported_metric" in revision_prompts
     assert "unsupported_claim" in revision_prompts
     assert "unsupported_section" in revision_prompts
+    assert "unsupported_outcome" in revision_prompts
+    assert "unsupported_time_reference" in revision_prompts
     assert "I am thrilled to apply" in revision_prompts
     assert "Wireshark" in revision_prompts
     assert "SLA" in revision_prompts
