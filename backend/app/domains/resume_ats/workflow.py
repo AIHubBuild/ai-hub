@@ -4,6 +4,7 @@ Implements the approved multi-step ATS pipeline
 (`docs/09_Migration_Analysis.md` §8.1):
 
     deterministic analysis → AI recommendations → tailored resume → cover letter
+    → deterministic review → targeted revision when needed
 
 Design rules honored here:
 
@@ -34,6 +35,7 @@ from app.domains.resume_ats.job_description import (
 )
 from app.domains.resume_ats.matching import analyze_job_match
 from app.domains.resume_ats.schemas import AtsAnalysisResult, RequirementEvidence
+from app.domains.resume_ats.writing_review import review_writing
 
 ATS_WORKFLOW_ID = "resume_ats/ats_pipeline"
 
@@ -135,6 +137,39 @@ def _merged_prompt_versions(
     return versions
 
 
+def _render_prompt(
+    template: Any,
+    state: AtsWorkflowState,
+    *,
+    revision_section: str = "",
+) -> str:
+    style_notes = (state.get("style_notes") or "").strip()
+    style_notes_section = (
+        f"\n\nSTYLE PREFERENCES FROM THE APPLICANT:\n{style_notes}\n"
+        if style_notes
+        else ""
+    )
+    revision_text = revision_section.strip() or (
+        "No revision pass is needed. Generate the first draft."
+    )
+    return template.user_template.format(
+        resume_text=state.get("resume_text", ""),
+        job_description=(
+            state.get("cleaned_job_description")
+            or state.get("job_description", "")
+        ),
+        match_score=state.get("match_score"),
+        matching_keywords=", ".join(state.get("matching_keywords", [])),
+        partial_keywords=", ".join(state.get("partial_keywords", [])),
+        missing_keywords=", ".join(state.get("missing_keywords", [])),
+        requirement_evidence=_format_evidence(state),
+        style_notes_section=style_notes_section,
+        improvement_suggestions=state.get("improvement_suggestions") or "",
+        tailored_resume=state.get("tailored_resume") or "",
+        revision_section=revision_text,
+    )
+
+
 def _make_llm_node(
     client: ChatClient, prompts: PromptRegistry, step: str
 ) -> Callable[[AtsWorkflowState], dict]:
@@ -148,27 +183,7 @@ def _make_llm_node(
 
     def node(state: AtsWorkflowState) -> dict:
         template = prompts.get(prompt_id)
-        style_notes = (state.get("style_notes") or "").strip()
-        style_notes_section = (
-            f"\n\nSTYLE PREFERENCES FROM THE APPLICANT:\n{style_notes}\n"
-            if style_notes
-            else ""
-        )
-        user = template.user_template.format(
-            resume_text=state.get("resume_text", ""),
-            job_description=(
-                state.get("cleaned_job_description")
-                or state.get("job_description", "")
-            ),
-            match_score=state.get("match_score"),
-            matching_keywords=", ".join(state.get("matching_keywords", [])),
-            partial_keywords=", ".join(state.get("partial_keywords", [])),
-            missing_keywords=", ".join(state.get("missing_keywords", [])),
-            requirement_evidence=_format_evidence(state),
-            style_notes_section=style_notes_section,
-            improvement_suggestions=state.get("improvement_suggestions") or "",
-            tailored_resume=state.get("tailored_resume") or "",
-        )
+        user = _render_prompt(template, state)
         response = normalize_writing(client.complete(system=template.system, user=user))
         return {
             output_field: response,
@@ -176,6 +191,89 @@ def _make_llm_node(
                 state, step, template.version
             ),
         }
+
+    return node
+
+
+def _revision_instructions(
+    document_name: str,
+    current_draft: str,
+    issues: list[Any],
+) -> str:
+    lines = [
+        f"REVISION PASS FOR THE {document_name.upper()}:",
+        "The current draft has these specific problems:",
+    ]
+    for issue in issues:
+        lines.append(f"- {issue.code}: {issue.message}")
+    lines.extend(
+        [
+            "",
+            "Current draft:",
+            current_draft.strip(),
+            "",
+            "Rewrite the draft so it fixes every problem above. Keep the same "
+            "verified facts, employers, dates, qualifications, and achievements. "
+            "Do not add anything the source material does not support. Remove "
+            "generic wording instead of replacing it with another cliche. "
+            "Return only the revised document.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def make_review_and_revise_node(
+    client: ChatClient, prompts: PromptRegistry
+) -> Callable[[AtsWorkflowState], dict]:
+    """Run the deterministic review and revise any document with issues."""
+
+    def node(state: AtsWorkflowState) -> dict:
+        updates: dict[str, str] = {}
+        resume_source = state.get("resume_text", "")
+        tailored_resume = state.get("tailored_resume", "")
+        cover_letter = state.get("cover_letter", "")
+
+        if tailored_resume:
+            resume_review = review_writing(
+                resume_source, tailored_resume, None
+            )
+            if not resume_review.passed:
+                template = prompts.get(PROMPT_IDS["tailored_resume"])
+                revision = _revision_instructions(
+                    "tailored resume",
+                    tailored_resume,
+                    resume_review.issues,
+                )
+                user = _render_prompt(
+                    template, state, revision_section=revision
+                )
+                tailored_resume = normalize_writing(
+                    client.complete(system=template.system, user=user)
+                )
+                updates["tailored_resume"] = tailored_resume
+
+        if cover_letter:
+            cover_review = review_writing(
+                resume_source, None, cover_letter
+            )
+            if not cover_review.passed:
+                template = prompts.get(PROMPT_IDS["cover_letter"])
+                revision = _revision_instructions(
+                    "cover letter",
+                    cover_letter,
+                    cover_review.issues,
+                )
+                cover_state = dict(state)
+                cover_state["tailored_resume"] = tailored_resume
+                user = _render_prompt(
+                    template, cover_state, revision_section=revision
+                )
+                cover_letter = normalize_writing(
+                    client.complete(system=template.system, user=user)
+                )
+                updates["cover_letter"] = cover_letter
+
+        return updates
 
     return node
 
@@ -230,12 +328,16 @@ def build_ats_workflow(client: ChatClient, prompts: PromptRegistry):
     graph.add_node("ai_analysis", make_analysis_node(client, prompts))
     graph.add_node("tailored_resume", make_tailored_resume_node(client, prompts))
     graph.add_node("cover_letter", make_cover_letter_node(client, prompts))
+    graph.add_node(
+        "review_and_revise", make_review_and_revise_node(client, prompts)
+    )
 
     graph.add_edge(START, "deterministic_analysis")
     graph.add_edge("deterministic_analysis", "ai_analysis")
     graph.add_edge("ai_analysis", "tailored_resume")
     graph.add_edge("tailored_resume", "cover_letter")
-    graph.add_edge("cover_letter", END)
+    graph.add_edge("cover_letter", "review_and_revise")
+    graph.add_edge("review_and_revise", END)
 
     return graph.compile()
 

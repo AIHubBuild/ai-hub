@@ -2,7 +2,11 @@
 
 from app.domains.resume_ats.writing_review import review_writing
 
-SOURCE = "Jane Doe\nIT Support Engineer at Acme GmbH (2021 - 2024)\n"
+SOURCE = (
+    "Jane Doe\n"
+    "IT Support Engineer at Acme GmbH (2021 - 2024)\n"
+    "Supported 400 users across Active Directory and Microsoft 365.\n"
+)
 
 CLEAN_TAILORED = (
     "Jane Doe\n"
@@ -79,6 +83,49 @@ def test_generic_cover_letter_opening_is_flagged():
         issue.code == "generic_phrase" and "writing to apply" in issue.message
         for issue in review.issues
     )
+
+
+def test_required_generic_cover_letter_phrases_are_flagged():
+    review = review_writing(
+        SOURCE,
+        CLEAN_TAILORED,
+        (
+            "Dear Hiring Manager,\n"
+            "I am thrilled to apply. My background aligns closely with my "
+            "experience, and I have a solid foundation in IT support.\n"
+            "Jane Doe\n"
+        ),
+    )
+
+    messages = [
+        issue.message
+        for issue in review.issues
+        if issue.code == "generic_phrase"
+    ]
+    assert any("thrilled to apply" in message for message in messages)
+    assert any("aligns closely with my experience" in message for message in messages)
+    assert any("solid foundation in" in message for message in messages)
+
+
+def test_unsupported_metric_is_flagged():
+    review = review_writing(
+        SOURCE,
+        "Jane Doe\nReduced downtime by 40%.\n",
+        CLEAN_COVER,
+    )
+
+    assert any(issue.code == "unsupported_metric" for issue in review.issues)
+    assert any("40%" in issue.message for issue in review.issues)
+
+
+def test_supported_metric_is_not_flagged():
+    review = review_writing(
+        SOURCE,
+        "Jane Doe\nSupported 400 users across Active Directory.\n",
+        CLEAN_COVER,
+    )
+
+    assert all(issue.code != "unsupported_metric" for issue in review.issues)
 
 
 def test_repeated_sentence_openers_are_flagged():

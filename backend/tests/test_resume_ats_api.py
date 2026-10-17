@@ -43,8 +43,8 @@ JOB_DESCRIPTION = (
 
 FAKE_RESPONSES = [
     "Add PowerShell automation projects and lab exposure.",
-    "Tailored resume content.",
-    "Tailored cover letter content.",
+    "Jane Doe\nTailored resume content.",
+    "Tailored cover letter content.\nJane Doe",
 ]
 
 TEST_SECRET = "test-jwt-secret-0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -515,10 +515,8 @@ def test_analysis_response_includes_writing_review(client):
     data = response.json()["data"]
     review = data["writing_review"]
     assert review is not None
-    # The canned outputs omit the applicant name ("Jane") entirely, so
-    # the deterministic review must flag the consistency issue.
-    assert review["passed"] is False
-    assert any(issue["code"] == "missing_name" for issue in review["issues"])
+    assert review["passed"] is True
+    assert review["issues"] == []
 
 
 def test_analysis_accepts_style_notes(client):

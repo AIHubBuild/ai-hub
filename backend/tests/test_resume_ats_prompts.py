@@ -28,9 +28,9 @@ def test_registers_exactly_the_three_workflow_templates():
 
     assert {t.prompt_id for t in PROMPT_TEMPLATES} == EXPECTED_PROMPT_IDS
     latest_versions = {
-        "resume_ats/ats_analysis": 3,
-        "resume_ats/tailored_resume": 4,
-        "resume_ats/cover_letter": 4,
+        "resume_ats/ats_analysis": 4,
+        "resume_ats/tailored_resume": 5,
+        "resume_ats/cover_letter": 5,
     }
     for prompt_id in EXPECTED_PROMPT_IDS:
         assert registry.get(prompt_id).version == latest_versions[prompt_id]
@@ -49,21 +49,22 @@ def test_latest_version_keeps_original_content_and_adds_accuracy_rules():
 
     latest = registry.get("resume_ats/ats_analysis")
 
-    assert latest.version == 3
+    assert latest.version == 4
     assert ATS_ANALYSIS_TEMPLATE.user_template in latest.user_template
     assert "{partial_keywords}" in latest.user_template
     assert "{requirement_evidence}" in latest.user_template
     assert "never inventing or exaggerating experience" in latest.user_template
-    assert "SHARED WRITING STYLE" in latest.user_template
+    assert "MANDATORY HUMAN WRITING STYLE" in latest.user_template
 
 
 def test_registering_a_new_version_does_not_replace_the_old():
     registry = make_registered_registry()
     registry.register(
-        ATS_ANALYSIS_TEMPLATE.model_copy(update={"version": 4})
+        ATS_ANALYSIS_TEMPLATE.model_copy(update={"version": 5})
     )
 
-    assert registry.get("resume_ats/ats_analysis").version == 4
+    assert registry.get("resume_ats/ats_analysis").version == 5
+    assert registry.get("resume_ats/ats_analysis", version=4).version == 4
     assert registry.get("resume_ats/ats_analysis", version=3).version == 3
     assert registry.get("resume_ats/ats_analysis", version=2).version == 2
     assert registry.get("resume_ats/ats_analysis", version=1) == ATS_ANALYSIS_TEMPLATE
@@ -163,7 +164,7 @@ def test_cover_letter_v3_adds_natural_writing_rules():
 def test_latest_tailored_resume_forbids_inventing_facts_and_metrics():
     template = make_registered_registry().get("resume_ats/tailored_resume")
 
-    assert template.version == 4
+    assert template.version == 5
     rules = template.user_template
     assert "Preserve the exact employers, job titles, and dates" in rules
     assert "never add experience, metrics, certifications, employers" in rules
@@ -177,7 +178,7 @@ def test_latest_tailored_resume_forbids_inventing_facts_and_metrics():
 def test_latest_cover_letter_forbids_new_claims_and_exaggeration():
     template = make_registered_registry().get("resume_ats/cover_letter")
 
-    assert template.version == 4
+    assert template.version == 5
     rules = template.user_template
     assert "Do not introduce new claims, achievements, or employers" in rules
     assert "If a job requirement is not supported by the optimized resume" in rules
@@ -189,13 +190,13 @@ def test_latest_cover_letter_forbids_new_claims_and_exaggeration():
 def test_latest_analysis_prompt_requires_truthful_keyword_guidance():
     template = make_registered_registry().get("resume_ats/ats_analysis")
 
-    assert template.version == 3
+    assert template.version == 4
     rules = template.user_template
     assert "Do not claim evidence that is not there" in rules
     assert "never inventing or exaggerating experience" in rules
     assert "recommend fake experience" in rules
     assert "suggest mentioning lab exposure" in rules
-    assert "SHARED WRITING STYLE" in rules
+    assert "MANDATORY HUMAN WRITING STYLE" in rules
 
 
 def test_latest_tailored_resume_is_job_specific_and_source_grounded():
@@ -208,15 +209,61 @@ def test_latest_tailored_resume_is_job_specific_and_source_grounded():
     assert "Preserve employers, job titles, dates" in rules
 
 
+def test_latest_generation_prompts_require_human_style_and_revision():
+    registry = make_registered_registry()
+
+    for prompt_id in ("resume_ats/tailored_resume", "resume_ats/cover_letter"):
+        rules = registry.get(prompt_id).user_template
+        assert "Write like a real human" in rules
+        assert "Avoid buzzwords, corporate jargon" in rules
+        assert "I am thrilled to apply" in rules
+        assert "aligns closely with my experience" in rules
+        assert "with a solid foundation in" in rules
+        assert "Never invent evidence" in rules
+        assert "copying the job description" in rules
+        assert "{revision_section}" in rules
+
+
+def test_latest_generation_prompts_render_revision_context():
+    from app.domains.resume_ats.prompts import (
+        COVER_LETTER_TEMPLATE_V5,
+        TAILORED_RESUME_TEMPLATE_V5,
+    )
+
+    tailored = TAILORED_RESUME_TEMPLATE_V5.user_template.format(
+        match_score=60,
+        matching_keywords="active directory",
+        partial_keywords="",
+        missing_keywords="powershell",
+        requirement_evidence="- active directory: Administered AD",
+        improvement_suggestions="Be specific about AD work.",
+        style_notes_section="",
+        resume_text="Jane Doe\nAdministered Active Directory.",
+        job_description="Active Directory required.",
+        revision_section="REVISION PASS FOR THE TAILORED RESUME:\n- generic_phrase",
+    )
+    cover = COVER_LETTER_TEMPLATE_V5.user_template.format(
+        tailored_resume="Jane Doe\nAdministered Active Directory.",
+        job_description="Active Directory required.",
+        style_notes_section="",
+        revision_section="REVISION PASS FOR THE COVER LETTER:\n- generic_phrase",
+    )
+
+    assert "REVISION PASS FOR THE TAILORED RESUME" in tailored
+    assert "REVISION PASS FOR THE COVER LETTER" in cover
+    assert "{" not in tailored
+    assert "{" not in cover
+
+
 def test_app_factory_registers_resume_ats_prompts():
     app = create_app()
 
     registry = app.state.ai_core.prompts
 
     latest_versions = {
-        "resume_ats/ats_analysis": 3,
-        "resume_ats/tailored_resume": 4,
-        "resume_ats/cover_letter": 4,
+        "resume_ats/ats_analysis": 4,
+        "resume_ats/tailored_resume": 5,
+        "resume_ats/cover_letter": 5,
     }
     for prompt_id in EXPECTED_PROMPT_IDS:
         assert registry.get(prompt_id).version == latest_versions[prompt_id]

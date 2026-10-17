@@ -1,9 +1,10 @@
 """Deterministic writing-quality review.
 
 A lightweight, dependency-free review stage that runs after generation
-and before results are returned or documents are exported. It flags —
-never silently rewrites — issues in the tailored resume and cover
-letter:
+and before results are returned or documents are exported. It flags
+issues in the tailored resume and cover letter. The workflow uses these
+findings to trigger a targeted revision pass; the review itself never
+rewrites text:
 
 - generic AI-style phrases,
 - any em dash,
@@ -39,6 +40,15 @@ GENERIC_PHRASES = [
     "hit the ground running",
     "dynamic and results-driven",
     "in today's fast-paced",
+    "i am thrilled to apply",
+    "i am excited to apply",
+    "aligns closely with my experience",
+    "solid foundation in",
+    "leverage my experience",
+    "dynamic professional",
+    "i would be an asset",
+    "strong background in",
+    "passionate about",
 ]
 
 # Transitions that become repetitive when they open many sentences.
@@ -68,16 +78,38 @@ def _opening_words(sentence: str) -> str:
     return f"{words[0].lower()} {words[1].lower()}"
 
 
+_NON_NAME_WORDS = {
+    "provided",
+    "managed",
+    "supported",
+    "worked",
+    "experienced",
+    "responsible",
+    "administered",
+    "maintained",
+    "built",
+    "led",
+}
+
+
 def _applicant_first_word(resume_source: str) -> str | None:
     for line in resume_source.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
-        word = stripped.split()[0] if stripped.split() else ""
-        # Only use it as a name signal when it looks like a name.
-        if len(word) >= 3 and word[0].isupper() and word[1:].isalpha():
-            return word
-        return None
+        words = stripped.split()
+        if not (2 <= len(words) <= 4):
+            return None
+        if any(ch in stripped for ch in ".@|:,"):
+            return None
+        if any(word.lower().strip("()") in _NON_NAME_WORDS for word in words):
+            return None
+        if not all(
+            word[:1].isupper() and word.replace("-", "").replace("'", "").isalpha()
+            for word in words
+        ):
+            return None
+        return words[0]
     return None
 
 
@@ -107,6 +139,43 @@ def _check_em_dashes(doc_name: str, text: str, issues: list) -> None:
                 ),
             )
         )
+
+
+METRIC_PATTERN = re.compile(
+    r"\b\d+(?:\.\d+)?\s*\+?\s*(?:%|(?:percent|users?|clients?|sites?|"
+    r"tickets?|servers?|devices?|years?|months?)\b)",
+    flags=re.IGNORECASE,
+)
+
+
+def _normalize_metric(value: str) -> str:
+    normalized = value.lower().replace("percent", "%")
+    return re.sub(r"\s+", "", normalized)
+
+
+def _metrics(text: str) -> set[str]:
+    return {_normalize_metric(match.group(0)) for match in METRIC_PATTERN.finditer(text)}
+
+
+def _check_unsupported_metrics(
+    doc_name: str,
+    text: str,
+    resume_source: str,
+    issues: list,
+) -> None:
+    supported = _metrics(resume_source)
+    for metric in sorted(_metrics(text)):
+        if metric not in supported:
+            issues.append(
+                WritingIssue(
+                    code="unsupported_metric",
+                    message=(
+                        f"{doc_name}: metric '{metric}' does not appear in "
+                        f"the source resume; remove it or use only verified "
+                        f"evidence."
+                    ),
+                )
+            )
 
 
 PLACEHOLDER_PATTERN = re.compile(
@@ -214,6 +283,7 @@ def review_writing(
         _check_generic_phrases(doc_name, text, issues)
         _check_em_dashes(doc_name, text, issues)
         _check_placeholders(doc_name, text, issues)
+        _check_unsupported_metrics(doc_name, text, resume_source, issues)
         _check_repeated_openers(doc_name, text, issues)
 
     if tailored_resume or cover_letter:

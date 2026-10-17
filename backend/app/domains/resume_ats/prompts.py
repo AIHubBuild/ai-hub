@@ -1,8 +1,8 @@
 """Resume ATS prompt assets.
 
-Versioned prompt templates for the approved three-step ATS workflow
-(analysis → tailored resume → cover letter; docs/09_Migration_Analysis.md
-§8.1). Ported from the legacy `system_prompts.py` per §3.2 (KEEP) and
+Versioned prompt templates for the approved ATS workflow
+(analysis → tailored resume → cover letter → review/revision;
+docs/09_Migration_Analysis.md §8.1). Ported from the legacy `system_prompts.py` per §3.2 (KEEP) and
 §5 Phase 2 item 10, with the legacy `===marker===` output format
 replaced by structured instructions (the marker-parsing approach is
 explicitly rejected, §8.1).
@@ -12,7 +12,10 @@ the approved workflow) and the legacy single-call Streamlit prompt.
 """
 
 from app.ai_core.prompts import PromptRegistry, PromptTemplate
-from app.ai_core.writing_style import SHARED_STYLE_GUIDE
+from app.ai_core.writing_style import (
+    HUMAN_WRITING_STYLE_RULES,
+    SHARED_STYLE_GUIDE,
+)
 
 # ---------------------------------------------------------------
 # 1. Analysis node, improvement suggestions.
@@ -568,6 +571,73 @@ PROMPT_TEMPLATES.extend(
         ATS_ANALYSIS_TEMPLATE_V3,
         TAILORED_RESUME_TEMPLATE_V4,
         COVER_LETTER_TEMPLATE_V4,
+    ]
+)
+
+
+
+# ---------------------------------------------------------------
+# Latest versions: mandatory human-writing style plus a real revision
+# pass. These are the prompts used by the workflow. The revision
+# placeholder lets the same prompt correct its own draft instead of
+# creating a parallel prompt or leaving review issues unresolved.
+# ---------------------------------------------------------------
+
+_TAILORED_RESUME_V5_STYLE = (
+    _TAILORED_RESUME_V4_STYLE
+    + "\n\n"
+    "REVISION PASS:\n"
+    "{revision_section}"
+)
+
+_COVER_LETTER_V5_STYLE = (
+    _COVER_LETTER_V4_STYLE
+    + "\n\n"
+    "REVISION PASS:\n"
+    "{revision_section}"
+)
+
+ATS_ANALYSIS_TEMPLATE_V4 = PromptTemplate(
+    prompt_id="resume_ats/ats_analysis",
+    version=4,
+    system=ATS_ANALYSIS_TEMPLATE_V2.system,
+    user_template=(
+        ATS_ANALYSIS_TEMPLATE_V2.user_template
+        + "\n\n"
+        + HUMAN_WRITING_STYLE_RULES
+        + _ANALYSIS_V3_STYLE
+    ),
+)
+
+TAILORED_RESUME_TEMPLATE_V5 = PromptTemplate(
+    prompt_id="resume_ats/tailored_resume",
+    version=5,
+    system=TAILORED_RESUME_TEMPLATE_V2.system,
+    user_template=(
+        TAILORED_RESUME_TEMPLATE_V2.user_template
+        + "\n\n"
+        + HUMAN_WRITING_STYLE_RULES
+        + _TAILORED_RESUME_V5_STYLE
+    ),
+)
+
+COVER_LETTER_TEMPLATE_V5 = PromptTemplate(
+    prompt_id="resume_ats/cover_letter",
+    version=5,
+    system=COVER_LETTER_TEMPLATE_V2.system,
+    user_template=(
+        COVER_LETTER_TEMPLATE_V2.user_template
+        + "\n\n"
+        + HUMAN_WRITING_STYLE_RULES
+        + _COVER_LETTER_V5_STYLE
+    ),
+)
+
+PROMPT_TEMPLATES.extend(
+    [
+        ATS_ANALYSIS_TEMPLATE_V4,
+        TAILORED_RESUME_TEMPLATE_V5,
+        COVER_LETTER_TEMPLATE_V5,
     ]
 )
 

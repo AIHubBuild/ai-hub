@@ -115,10 +115,11 @@ def run_ats_analysis(
 
     The deterministic matcher computes the estimated score, keyword
     lists, and per-requirement evidence; the AI nodes fill the remaining
-    sections through the configured provider. A deterministic
-    writing-quality review then flags any stylistic or consistency
-    issues. Both the analysis record and the ai_core run record are
-    persisted, scoped to `user_id`.
+    sections through the configured provider. The workflow runs a
+    deterministic writing-quality review and a targeted revision pass
+    when issues are found; the final review is returned to the caller.
+    Both the analysis record and the ai_core run record are persisted,
+    scoped to `user_id`.
 
     Returns the persisted record and the full result contract (the
     explainability and review fields are computed per run and are not

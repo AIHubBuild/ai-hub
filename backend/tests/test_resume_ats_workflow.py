@@ -18,7 +18,10 @@ from app.domains.resume_ats.workflow import (
     result_from_state,
 )
 
-RESUME = "Experience with Active Directory, Microsoft 365 and VPN support."
+RESUME = (
+    "Jane Doe\n"
+    "Experience with Active Directory, Microsoft 365 and VPN support."
+)
 JOB_DESCRIPTION = (
     "Looking for Active Directory, Microsoft 365, VPN, PowerShell and "
     "Intune experience."
@@ -52,8 +55,8 @@ def make_client() -> ScriptedClient:
     return ScriptedClient(
         responses=[
             "Add PowerShell automation projects and lab exposure.",
-            "Tailored resume content.",
-            "Tailored cover letter content.",
+            "Jane Doe\nTailored resume content.",
+            "Tailored cover letter content.\nJane Doe",
         ]
     )
 
@@ -83,7 +86,7 @@ def test_analysis_node_uses_deterministic_inputs_and_records_prompt_version():
     )
 
     assert output["improvement_suggestions"].startswith("Add PowerShell")
-    assert output["prompt_versions"] == {"analysis": 3}
+    assert output["prompt_versions"] == {"analysis": 4}
     rendered = client.calls[0]["user"]
     assert "57" in rendered
     assert "active directory" in rendered
@@ -92,7 +95,7 @@ def test_analysis_node_uses_deterministic_inputs_and_records_prompt_version():
 
 
 def test_tailored_resume_node_records_prompt_version():
-    client = ScriptedClient(responses=["Tailored resume content."])
+    client = ScriptedClient(responses=["Jane Doe\nTailored resume content."])
     registry = make_registry()
     node = make_tailored_resume_node(client, registry)
 
@@ -107,8 +110,8 @@ def test_tailored_resume_node_records_prompt_version():
         }
     )
 
-    assert output["tailored_resume"] == "Tailored resume content."
-    assert output["prompt_versions"] == {"tailored_resume": 4}
+    assert output["tailored_resume"] == "Jane Doe\nTailored resume content."
+    assert output["prompt_versions"] == {"tailored_resume": 5}
     rendered = client.calls[0]["user"]
     assert "Suggestions." in rendered
     assert "powershell" in rendered
@@ -116,7 +119,7 @@ def test_tailored_resume_node_records_prompt_version():
 
 
 def test_style_notes_are_rendered_when_provided():
-    client = ScriptedClient(responses=["Tailored resume content."])
+    client = ScriptedClient(responses=["Jane Doe\nTailored resume content."])
     node = make_tailored_resume_node(client, make_registry())
 
     node(
@@ -133,7 +136,7 @@ def test_style_notes_are_rendered_when_provided():
 
 
 def test_cover_letter_node_records_prompt_version():
-    client = ScriptedClient(responses=["Tailored cover letter content."])
+    client = ScriptedClient(responses=["Tailored cover letter content.\nJane Doe"])
     registry = make_registry()
     node = make_cover_letter_node(client, registry)
 
@@ -145,8 +148,8 @@ def test_cover_letter_node_records_prompt_version():
         }
     )
 
-    assert output["cover_letter"] == "Tailored cover letter content."
-    assert output["prompt_versions"] == {"cover_letter": 4}
+    assert output["cover_letter"] == "Tailored cover letter content.\nJane Doe"
+    assert output["prompt_versions"] == {"cover_letter": 5}
     rendered = client.calls[0]["user"]
     assert "Tailored resume content." in rendered
     assert JOB_DESCRIPTION in rendered
@@ -157,7 +160,7 @@ def test_ai_node_uses_latest_registered_prompt_version():
 
     client = make_client()
     registry = make_registry()
-    registry.register(ATS_ANALYSIS_TEMPLATE.model_copy(update={"version": 4}))
+    registry.register(ATS_ANALYSIS_TEMPLATE.model_copy(update={"version": 5}))
     node = make_analysis_node(client, registry)
 
     output = node(
@@ -170,7 +173,7 @@ def test_ai_node_uses_latest_registered_prompt_version():
         }
     )
 
-    assert output["prompt_versions"] == {"analysis": 4}
+    assert output["prompt_versions"] == {"analysis": 5}
 
 
 # ---------------------------------------------------------------
@@ -195,12 +198,12 @@ def test_graph_runs_end_to_end_with_deterministic_engine_owning_the_score():
     }
     assert set(state["missing_keywords"]) == {"powershell", "intune"}
     assert state["improvement_suggestions"].startswith("Add PowerShell")
-    assert state["tailored_resume"] == "Tailored resume content."
-    assert state["cover_letter"] == "Tailored cover letter content."
+    assert state["tailored_resume"] == "Jane Doe\nTailored resume content."
+    assert state["cover_letter"] == "Tailored cover letter content.\nJane Doe"
     assert state["prompt_versions"] == {
-        "analysis": 3,
-        "tailored_resume": 4,
-        "cover_letter": 4,
+        "analysis": 4,
+        "tailored_resume": 5,
+        "cover_letter": 5,
     }
     assert len(client.calls) == 3
 
@@ -209,8 +212,8 @@ def test_llm_text_cannot_override_the_deterministic_score():
     client = ScriptedClient(
         responses=[
             "The ATS score is 99. Improvement suggestions follow.",
-            "Tailored resume content.",
-            "Cover letter content.",
+            "Jane Doe\nTailored resume content.",
+            "Cover letter content.\nJane Doe",
         ]
     )
     graph = build_ats_workflow(client, make_registry())
@@ -237,8 +240,8 @@ def test_result_from_state_maps_all_six_sections():
     }
     assert set(result.missing_keywords) == {"powershell", "intune"}
     assert result.improvement_suggestions.startswith("Add PowerShell")
-    assert result.tailored_resume == "Tailored resume content."
-    assert result.cover_letter == "Tailored cover letter content."
+    assert result.tailored_resume == "Jane Doe\nTailored resume content."
+    assert result.cover_letter == "Tailored cover letter content.\nJane Doe"
 
 
 def test_node_failure_propagates_out_of_invoke():

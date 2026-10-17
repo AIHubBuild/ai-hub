@@ -20,10 +20,17 @@ RESUME = (
     "Jane Doe\n"
     "IT Support Engineer at Acme GmbH (2021 - 2024)\n"
     "Supported Active Directory and Microsoft 365 for 400 users.\n"
+    "Automated user provisioning with PowerShell during onboarding.\n"
+    "Maintained VPN connectivity and resolved endpoint issues.\n"
 )
 JOB = (
-    "We need Active Directory, Microsoft 365, VPN, PowerShell, and "
-    "Intune experience."
+    "Requirements:\n"
+    "- Active Directory administration\n"
+    "- Microsoft 365 administration\n"
+    "- PowerShell scripting\n"
+    "- VPN troubleshooting\n"
+    "Experience:\n"
+    "- 3+ years in an IT support role\n"
 )
 
 
@@ -64,9 +71,16 @@ def test_latest_prompts_reuse_the_shared_style_guide():
     ]
     support_template = support_registry.get("support_copilot/troubleshoot")
 
-    for template in resume_templates + [support_template]:
-        assert "SHARED WRITING STYLE" in template.user_template
+    for template in resume_templates:
+        assert "MANDATORY HUMAN WRITING STYLE" in template.user_template
+        assert "Write like a real human" in template.user_template
         assert "Never use em dashes" in template.user_template
+
+    for prompt_id in ("resume_ats/tailored_resume", "resume_ats/cover_letter"):
+        assert "{revision_section}" in resume_registry.get(prompt_id).user_template
+
+    assert "SHARED WRITING STYLE" in support_template.user_template
+    assert "Never use em dashes" in support_template.user_template
 
     # The latest support prompt is the consolidated version rather than
     # an ever-growing append-only prompt.
@@ -74,20 +88,37 @@ def test_latest_prompts_reuse_the_shared_style_guide():
     assert len(support_template.user_template) < 12000
 
 
-def test_generated_resume_output_is_normalised_then_reviewed():
+def test_review_triggers_meaningful_revision_of_both_documents():
     client = ScriptedClient(
         [
-            "Add a measured PowerShell example \u2014 only if the resume supports it.",
+            "Add a measured PowerShell example only if the resume supports it.",
             (
                 "Jane Doe\n"
                 "Professional Summary:\n"
-                "I am passionate about leveraging my skills \u2014 across IT support.\n"
+                "I am thrilled to apply \u2014 I have a solid foundation in IT "
+                "support and reduced downtime by 40%.\n"
                 "Skills:\n"
                 "- Active Directory\n"
             ),
             (
                 "Dear Hiring Manager,\n"
-                "I am writing to apply \u2014 this role matches my support experience.\n"
+                "I am writing to apply \u2014 my experience aligns closely with "
+                "your needs.\n"
+                "Jane Doe\n"
+            ),
+            (
+                "Jane Doe\n"
+                "Professional Summary:\n"
+                "IT support engineer with three years of experience supporting "
+                "Active Directory and Microsoft 365 for 400 users.\n"
+                "Automated user provisioning with PowerShell during onboarding.\n"
+                "Resolved VPN and endpoint issues for staff at Acme.\n"
+            ),
+            (
+                "Dear Hiring Manager,\n"
+                "I supported 400 users across Active Directory and Microsoft 365 "
+                "at Acme. I also automated user provisioning with PowerShell, "
+                "which reduced manual setup work during onboarding.\n"
                 "Jane Doe\n"
             ),
         ]
@@ -97,20 +128,54 @@ def test_generated_resume_output_is_normalised_then_reviewed():
     state = graph.invoke({"resume_text": RESUME, "job_description": JOB})
     result = result_from_state(state)
 
-    for value in (
-        result.improvement_suggestions or "",
-        result.tailored_resume or "",
-        result.cover_letter or "",
-    ):
-        assert "\u2014" not in value
+    assert len(client.calls) == 5
+    assert "I am thrilled to apply" not in (result.tailored_resume or "")
+    assert "aligns closely with my experience" not in (result.cover_letter or "")
+    assert "40%" not in (result.tailored_resume or "")
+    assert "400 users" in (result.tailored_resume or "")
+    assert "400 users" in (result.cover_letter or "")
 
     review = review_writing(
         RESUME, result.tailored_resume, result.cover_letter
     )
-    assert review.passed is False
-    assert any(issue.code == "generic_phrase" for issue in review.issues)
-    assert all(issue.code != "em_dash_overuse" for issue in review.issues)
+    assert review.passed is True, review.issues
 
+    revision_prompts = client.calls[3]["user"] + "\n" + client.calls[4]["user"]
+    assert "REVISION PASS FOR THE TAILORED RESUME" in revision_prompts
+    assert "REVISION PASS FOR THE COVER LETTER" in revision_prompts
+    assert "generic_phrase" in revision_prompts
+    assert "unsupported_metric" in revision_prompts
+    assert "I am thrilled to apply" in revision_prompts
+    assert "Current draft:" in revision_prompts
+
+
+def test_human_style_and_factual_rules_reach_generation_calls():
+    client = ScriptedClient(
+        [
+            "Add one specific PowerShell example.",
+            "Jane Doe\nTailored resume content grounded in Acme work.",
+            "Cover letter grounded in Acme work.\nJane Doe",
+        ]
+    )
+    graph = build_ats_workflow(client, make_resume_registry())
+
+    graph.invoke({"resume_text": RESUME, "job_description": JOB})
+
+    assert len(client.calls) == 3
+    tailored_prompt = client.calls[1]["user"]
+    cover_prompt = client.calls[2]["user"]
+    for prompt in (tailored_prompt, cover_prompt):
+        assert "MANDATORY HUMAN WRITING STYLE" in prompt
+        assert "I am thrilled to apply" in prompt
+        assert "aligns closely with my experience" in prompt
+        assert "with a solid foundation in" in prompt
+        assert "Never invent evidence" in prompt
+        assert "copying the job description" in prompt
+        assert "No revision pass is needed" in prompt
+
+    assert RESUME in tailored_prompt
+    assert JOB in tailored_prompt
+    assert JOB in cover_prompt
 
 def test_resume_prompt_is_job_specific_and_handles_missing_information():
     template = make_resume_registry().get("resume_ats/tailored_resume")
@@ -123,6 +188,7 @@ def test_resume_prompt_is_job_specific_and_handles_missing_information():
         requirement_evidence="- powershell (technical_skills, missing): no evidence",
         improvement_suggestions="Add an honest PowerShell project if one exists.",
         style_notes_section="",
+        revision_section="No revision pass is needed.",
         resume_text=RESUME,
         job_description=JOB,
     )

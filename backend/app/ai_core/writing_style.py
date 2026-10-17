@@ -34,6 +34,38 @@ SHARED_STYLE_GUIDE = (
     "to the task."
 )
 
+HUMAN_WRITING_STYLE_RULES = (
+    "MANDATORY HUMAN WRITING STYLE:\n"
+    "- Write like a real human. Be professional, but natural, like you are "
+    "explaining something to a smart friend. Avoid buzzwords, corporate "
+    "jargon, and em dashes. Never sound like a press release. Be clear, "
+    "direct, conversational, and real.\n"
+    "- Use direct language and varied sentence structures. Avoid a formulaic "
+    "rhythm or a repetitive template.\n"
+    "- Use specific evidence from the candidate's actual resume. Connect that "
+    "evidence to the job requirements naturally instead of copying the job "
+    "description or stuffing keywords.\n"
+    "- Preserve real qualifications, experience, dates, skill levels, and "
+    "achievements. Never invent evidence, metrics, credentials, employers, or "
+    "responsibilities.\n"
+    "- Avoid generic openings and cliches, including: \"I am thrilled to "
+    "apply\", \"aligns closely with my experience\", \"with a solid "
+    "foundation in\", \"I am excited to apply\", \"I would be a great "
+    "fit\", \"leverage my experience\", \"proven track record\", "
+    "\"dynamic professional\", \"results-driven\", \"hit the ground "
+    "running\", \"in today's fast-paced\", and \"valuable addition to "
+    "your team\".\n"
+    "- Never use em dashes. Use commas, full stops, colons, or parentheses "
+    "instead.\n"
+    "- Avoid corporate jargon, exaggerated claims, repetitive conclusions, "
+    "and generic filler.\n"
+    "- Keep the writing appropriate for the document: a resume must be "
+    "concise and evidence-based; a cover letter must sound like a real person "
+    "explaining why their experience fits the role.\n"
+    "- Sound natural because the facts are specific, not because the tone is "
+    "casual or padded."
+)
+
 EM_DASH = "\u2014"
 _EM_DASH_PATTERN = re.compile(r"\s*\u2014\s*")
 _SPACE_RUN = re.compile(r"[ \t]{2,}")
