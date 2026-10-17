@@ -10,12 +10,11 @@ export function ErrorPanel({
   return (
     <div
       role="alert"
-      className="rounded-xl border border-zinc-200 bg-zinc-50 p-8 text-center dark:border-zinc-800 dark:bg-zinc-900"
+      className="rounded-2xl bg-surface p-8 text-center ring-1 ring-line/80 sm:p-10"
     >
-      <h3 className="text-base font-medium text-zinc-900 dark:text-zinc-50">
-        {title}
-      </h3>
-      <p className="mx-auto mt-2 max-w-md text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="ui-eyebrow text-danger">Error</p>
+      <h3 className="ui-display mt-3 text-2xl text-ink">{title}</h3>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
         {message}
       </p>
       <ReloadButton />

@@ -12,7 +12,7 @@ Errors map to:
 - 409 message sent to a resolved session
 - 422 invalid or oversized message
 - 502 AI provider failure during a run
-- 503 AI provider not configured (no OPENAI_API_KEY)
+- 503 AI provider not configured (no AI_API_KEY / DEEPSEEK_API_KEY)
 """
 
 from uuid import UUID
@@ -163,10 +163,9 @@ def get_support_session(
             ],
             ticket=(
                 TicketData(
-                    ticket_id=service.display_ticket_id(ticket.id),
-                    priority=ticket.priority,
-                    assigned_team=ticket.assigned_team,
-                    status=ticket.status,
+                    **service.ticket_details(
+                        ticket, support_session.messages or []
+                    )
                 )
                 if ticket is not None
                 else None

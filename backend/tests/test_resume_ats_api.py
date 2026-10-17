@@ -318,9 +318,10 @@ def test_analysis_runs_workflow_and_returns_six_sections(client):
     body = response.json()
     assert body["success"] is True
     data = body["data"]
-    # matched: active directory, microsoft 365, vpn;
-    # missing: powershell, intune -> base = int(3/5*100) = 60 -> band 60
-    assert data["ats_score"] == 60
+    # Three of the five terms in the experience requirement match; the
+    # requirement is partial, and evidence confidence is limited because
+    # the resume does not show dated experience.
+    assert data["ats_score"] == 39
     assert set(data["matching_keywords"]) == {
         "active directory",
         "microsoft 365",
@@ -423,7 +424,8 @@ def test_analysis_without_provider_returns_503(tmp_path):
 
     assert response.status_code == 503
     message = response.json()["message"]
-    assert "OPENAI_API_KEY" in message
+    assert "AI_API_KEY" in message
+    assert "DEEPSEEK_API_KEY" in message
 
 
 def test_no_provider_means_no_fabricated_analysis_or_run_record(tmp_path):
@@ -484,13 +486,19 @@ def test_analysis_response_includes_explainability_fields(client):
     )
 
     data = response.json()["data"]
-    assert data["score_label"] == "Estimated job-match score"
+    assert data["score_label"] == "Estimated resume-to-job match"
     assert data["partial_keywords"] == []
     assert data["job_description_warning"] is None
-    requirements = {r["term"]: r for r in data["requirement_analysis"]}
-    assert requirements["active directory"]["status"] == "supported"
-    assert requirements["active directory"]["evidence"]
-    assert requirements["powershell"]["status"] == "missing"
+    assert data["requirement_coverage"] == 50
+    assert data["evidence_confidence"] < 100
+    requirements = data["requirement_analysis"]
+    experience = next(
+        r for r in requirements if "Active Directory" in r["term"]
+    )
+    assert experience["status"] == "partial"
+    assert experience["evidence"]
+    assert "powershell" in experience["detail"]
+    assert "powershell" in data["missing_keywords"]
     assert data["score_breakdown"]
 
 
@@ -550,8 +558,9 @@ def test_boilerplate_job_description_warns_and_scores_anyway(client):
     data = response.json()["data"]
     assert data["job_description_warning"] is not None
     assert "boilerplate" in data["job_description_warning"]
-    # The genuine requirement still drives the analysis.
-    assert data["ats_score"] == 100
+    # The genuine requirement still drives the analysis, but a single
+    # matched term does not produce a perfect score.
+    assert data["ats_score"] == 79
     assert data["matching_keywords"] == ["active directory"]
 
 
@@ -569,9 +578,70 @@ def test_synonym_match_is_reported_as_partial(client):
 
     data = response.json()["data"]
     assert data["partial_keywords"] == ["technical support"]
-    requirements = {r["term"]: r for r in data["requirement_analysis"]}
-    assert requirements["technical support"]["status"] == "partial"
-    assert requirements["technical support"]["evidence"]
+    requirement = next(
+        r for r in data["requirement_analysis"] if "Technical support" in r["term"]
+    )
+    assert requirement["status"] == "partial"
+    assert requirement["evidence"]
+
+
+def test_genuine_zero_score_reported_with_missing_keywords_and_breakdown(client):
+    test_client, _ = client
+    resume_id = upload_resume(
+        test_client, content="Worked in retail customer service."
+    ).json()["data"]["resume_id"]
+
+    response = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={
+            "job_description": (
+                "We need Microsoft 365, VPN, Teams and Windows experience."
+            )
+        },
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 201
+    data = response.json()["data"]
+    # A resume that contains none of the detected requirements scores 0.
+    assert data["ats_score"] == 0
+    assert data["score_label"] == "Estimated resume-to-job match"
+    assert data["matching_keywords"] == []
+    assert data["missing_keywords"]
+    assert data["score_breakdown"]
+    assert all(0 <= entry["score"] <= 100 for entry in data["score_breakdown"])
+    assert all(entry["total"] > 0 for entry in data["score_breakdown"])
+
+
+def test_non_zero_score_reported_when_resume_covers_requirements(client):
+    test_client, _ = client
+    resume_id = upload_resume(
+        test_client,
+        content=(
+            "Managed Microsoft 365 tenants, VPN gateways, Microsoft Teams "
+            "deployments, and Windows 11 fleets."
+        ),
+    ).json()["data"]["resume_id"]
+
+    response = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={
+            "job_description": (
+                "We need Microsoft 365, VPN, Teams and Windows experience."
+            )
+        },
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 201
+    data = response.json()["data"]
+    # All four terms match, but the score is not 100 because the resume
+    # has no dated experience, qualification, or achievement evidence.
+    assert data["ats_score"] == 81
+    assert 0 < data["ats_score"] < 100
+    assert data["matching_keywords"]
+    assert data["missing_keywords"] == []
+    assert data["evidence_confidence"] < 100
 
 
 def test_upload_docx_through_api(client):

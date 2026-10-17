@@ -17,7 +17,9 @@ def escalate(state: dict) -> dict:
 
     if issue_type in CRITICAL_ISSUES:
         escalation_message = (
-            f"This issue requires escalation to the IT support team: {user_issue}"
+            "This issue meets the escalation criteria. An escalation "
+            f"request was recorded for: {user_issue}. No human engineer "
+            "has accepted the ticket yet."
         )
         resolution = state.get("resolution") or ""
         return {

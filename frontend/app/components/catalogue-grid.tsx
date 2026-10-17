@@ -10,24 +10,24 @@ export async function CatalogueGrid() {
     return (
       <ErrorPanel
         title="Could not load the assistant catalogue"
-        message="The backend API is unreachable. Start the FastAPI server on port 8000, then reload the page."
+        message="The assistant catalogue is temporarily unavailable. Please try again in a moment."
       />
     );
   }
 
   if (catalogue.length === 0) {
     return (
-      <p className="rounded-xl border border-zinc-200 bg-zinc-50 p-8 text-center text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+      <p className="rounded-[28px] border border-dashed border-line bg-surface/60 p-10 text-center text-sm text-muted">
         No assistants have been registered yet.
       </p>
     );
   }
 
   return (
-    <ul className="grid list-none gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {catalogue.map((assistant) => (
+    <ul className="grid list-none gap-4 md:grid-cols-2">
+      {catalogue.map((assistant, index) => (
         <li key={assistant.id} className="flex">
-          <AssistantCard assistant={assistant} />
+          <AssistantCard assistant={assistant} index={index} />
         </li>
       ))}
     </ul>

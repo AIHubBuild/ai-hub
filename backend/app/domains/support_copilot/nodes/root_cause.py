@@ -8,6 +8,7 @@ client seam.
 from typing import Any, Callable, Protocol
 
 from app.ai_core.prompts import PromptRegistry
+from app.ai_core.writing_style import normalize_writing
 
 
 class ChatClient(Protocol):
@@ -25,6 +26,6 @@ def make_root_cause_node(
             conversation_history=state.get("conversation_history", ""),
         )
         response = client.complete(system=template.system, user=user)
-        return {"root_cause_summary": str(response).strip()}
+        return {"root_cause_summary": normalize_writing(str(response))}
 
     return node

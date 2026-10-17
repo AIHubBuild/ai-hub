@@ -39,17 +39,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ai_core = create_ai_core(run_store=SQLAlchemyRunRecordStore(session_factory))
     # Provider clients are registered once at the platform level; each
     # domain only registers its own prompts, model config, and workflows.
-    if settings.openai_api_key:
+    # The provider registry name, base URL, model, and thinking mode all
+    # come from settings, and the API key is never logged or exposed.
+    if settings.ai_api_key:
         ai_core.llm_factory.register_provider(
-            "openai",
+            settings.ai_provider_name,
             OpenAIProvider(
-                api_key=settings.openai_api_key,
-                base_url=settings.openai_base_url,
-                timeout_seconds=settings.openai_timeout_seconds,
+                api_key=settings.ai_api_key,
+                base_url=settings.ai_base_url,
+                timeout_seconds=settings.ai_timeout_seconds,
+                thinking=settings.thinking_mode,
+                reasoning_effort=settings.reasoning_effort,
             ),
         )
     wire_resume_ats(ai_core, settings)
-    wire_support_copilot(ai_core)
+    wire_support_copilot(ai_core, settings)
     app.state.ai_core = ai_core
 
     app.add_middleware(

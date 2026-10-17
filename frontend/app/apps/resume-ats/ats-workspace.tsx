@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { useAuth } from "../../components/auth/auth-provider";
 import { ApiError } from "../../lib/api";
+import { DocumentTextIcon } from "../../components/icons";
 import {
   AtsAnalysisData,
   RequirementEvidence,
@@ -15,6 +16,7 @@ import {
 } from "../../lib/resume-ats";
 
 type Stage = "idle" | "uploading" | "analyzing" | "error" | "done";
+type ResultTab = "suggestions" | "resume" | "cover";
 
 const ACCEPT = SUPPORTED_EXTENSIONS.join(",");
 
@@ -30,6 +32,7 @@ export function AtsWorkspace() {
   const [downloading, setDownloading] = useState(false);
   const [downloadingCoverLetter, setDownloadingCoverLetter] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [resultTab, setResultTab] = useState<ResultTab>("suggestions");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canSubmit =
@@ -48,6 +51,7 @@ export function AtsWorkspace() {
     setError(null);
     setErrorIsAuth(false);
     setResult(null);
+    setResultTab("suggestions");
     setStage("uploading");
     try {
       const uploaded = await uploadResume(file);
@@ -119,6 +123,7 @@ export function AtsWorkspace() {
     setErrorIsAuth(false);
     setDownloadError(null);
     setResult(null);
+    setResultTab("suggestions");
     setFileName(null);
     setJobDescription("");
     setStyleNotes("");
@@ -130,12 +135,19 @@ export function AtsWorkspace() {
   const coverLetterText = (result?.cover_letter ?? "").trim();
   const hasCoverLetter = coverLetterText.length > 0;
 
+  const scoreTone =
+    (result?.ats_score ?? 0) >= 75
+      ? "text-success"
+      : (result?.ats_score ?? 0) >= 50
+        ? "text-ink"
+        : "text-danger";
+
   if (authLoading) {
     return (
-      <div className="flex min-h-48 items-center justify-center rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex min-h-48 items-center justify-center rounded-[28px] bg-surface ring-1 ring-line/80">
         <div
           aria-hidden="true"
-          className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 dark:border-zinc-700 dark:border-t-zinc-50"
+          className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-accent"
         />
       </div>
     );
@@ -143,17 +155,17 @@ export function AtsWorkspace() {
 
   if (session === null) {
     return (
-      <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-50">
+      <div className="rounded-[28px] bg-surface p-8 text-center ring-1 ring-line/80 sm:p-10">
+        <h2 className="ui-display text-2xl text-ink">
           Sign in to use the ATS Resume Assistant
         </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
           Your resume analyses and generated documents are private to your
           account. Sign in to upload a resume and run an ATS analysis.
         </p>
         <Link
           href="/login?redirect=/apps/resume-ats"
-          className="mt-5 inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:focus-visible:outline-zinc-50"
+          className="ui-button ui-button-primary mt-5"
         >
           Sign in
         </Link>
@@ -162,39 +174,68 @@ export function AtsWorkspace() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+    <div className="overflow-hidden rounded-[28px] bg-surface ring-1 ring-line/80">
+      <div className="grid lg:grid-cols-[390px_minmax(0,1fr)]">
       <form
         onSubmit={handleSubmit}
-        className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className="border-b border-line bg-surface-muted/55 p-6 sm:p-8 lg:border-b-0 lg:border-r"
       >
-        <h2 className="mb-4 text-lg font-medium text-zinc-900 dark:text-zinc-50">
-          1. Resume &amp; job description
-        </h2>
+        <div className="mb-7">
+          <p className="ui-eyebrow">New analysis</p>
+          <h2 className="ui-display mt-2 text-2xl text-ink">
+            Build a job-specific resume
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Add your resume and the role. You will see the evidence behind
+            the score before you download anything.
+          </p>
+        </div>
 
         <label
           htmlFor="resume-file"
-          className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          className="mb-2 flex items-center gap-3 text-sm font-semibold text-ink"
         >
+          <span aria-hidden="true" className="font-mono text-[11px] text-muted">
+            01
+          </span>
           Resume file
         </label>
-        <input
-          id="resume-file"
-          ref={fileInputRef}
-          type="file"
-          accept={ACCEPT}
-          className="block w-full cursor-pointer rounded-lg border border-zinc-200 bg-zinc-50 p-2 text-sm text-zinc-600 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:file:bg-zinc-50 dark:file:text-zinc-900 dark:hover:file:bg-zinc-200"
-          onChange={(event) =>
-            setFileName(event.target.files?.[0]?.name ?? null)
-          }
-        />
-        <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-          PDF, DOCX, or TXT — up to 5 MB.
-        </p>
+        <div className="flex items-center gap-3 rounded-xl border border-dashed border-line bg-surface px-3.5 py-3.5 transition-colors focus-within:border-accent">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
+            <DocumentTextIcon className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <input
+              id="resume-file"
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPT}
+              className="sr-only"
+              onChange={(event) =>
+                setFileName(event.target.files?.[0]?.name ?? null)
+              }
+            />
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <label
+                htmlFor="resume-file"
+                className="ui-button ui-button-secondary cursor-pointer px-3 py-1.5 text-xs"
+              >
+                {fileName ? "Replace file" : "Choose file"}
+              </label>
+              <p className="min-w-0 truncate text-xs text-muted">
+                {fileName ?? "PDF, DOCX, or TXT. Up to 5 MB."}
+              </p>
+            </div>
+          </div>
+        </div>
 
         <label
           htmlFor="job-description"
-          className="mb-1.5 mt-5 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          className="mb-2 mt-6 flex items-center gap-3 text-sm font-semibold text-ink"
         >
+          <span aria-hidden="true" className="font-mono text-[11px] text-muted">
+            02
+          </span>
           Job description
         </label>
         <textarea
@@ -203,14 +244,17 @@ export function AtsWorkspace() {
           onChange={(event) => setJobDescription(event.target.value)}
           rows={8}
           placeholder="Paste the target job description here…"
-          className="w-full rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-2 focus:outline-offset-2 focus:outline-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-500"
+          className="ui-field resize-none"
         />
 
         <label
           htmlFor="style-notes"
-          className="mb-1.5 mt-5 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          className="mb-2 mt-6 flex items-center gap-3 text-sm font-semibold text-ink"
         >
-          Style preferences (optional)
+          <span aria-hidden="true" className="font-mono text-[11px] text-muted">
+            03
+          </span>
+          Style preferences <span className="font-normal text-muted">(optional)</span>
         </label>
         <textarea
           id="style-notes"
@@ -219,13 +263,13 @@ export function AtsWorkspace() {
           rows={2}
           maxLength={500}
           placeholder="e.g. Keep it factual, short sentences, UK spelling…"
-          className="w-full rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-2 focus:outline-offset-2 focus:outline-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-500"
+          className="ui-field resize-none"
         />
 
         <button
           type="submit"
           disabled={!canSubmit}
-          className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:focus-visible:outline-zinc-50"
+          className="ui-button ui-button-primary mt-6 w-full"
         >
           {stage === "uploading"
             ? "Uploading resume…"
@@ -237,47 +281,84 @@ export function AtsWorkspace() {
 
       <section
         aria-live="polite"
-        className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className="min-h-[32rem] p-6 sm:p-8"
       >
         {stage === "idle" && (
-          <div className="flex h-full min-h-48 flex-col items-center justify-center text-center">
-            <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-50">
-              ATS analysis
-            </h2>
-            <p className="mt-2 max-w-sm text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-              The deterministic keyword engine computes the score and
-              keyword findings; the AI provider adds improvement
-              suggestions, a tailored resume, and a cover letter.
-            </p>
+          <div className="flex h-full min-h-[26rem] flex-col justify-between">
+            <div>
+              <p className="ui-eyebrow">Results</p>
+              <h2 className="ui-display mt-3 text-3xl text-ink">
+                A clear read on the fit.
+              </h2>
+              <p className="mt-3 max-w-md text-sm leading-6 text-muted">
+                You will see the estimated match, the evidence behind it,
+                and the gaps worth addressing before you download anything.
+              </p>
+            </div>
+            <dl className="grid gap-5 border-t border-line pt-6 sm:grid-cols-3">
+              <div>
+                <dt className="text-sm font-semibold text-ink">Match score</dt>
+                <dd className="mt-1 text-xs leading-5 text-muted">
+                  Weighted coverage of the requirements found in the job
+                  description.
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-semibold text-ink">
+                  Keyword evidence
+                </dt>
+                <dd className="mt-1 text-xs leading-5 text-muted">
+                  Found, partial, and missing terms, each tied to your
+                  resume.
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-semibold text-ink">
+                  Ready to export
+                </dt>
+                <dd className="mt-1 text-xs leading-5 text-muted">
+                  Review the suggestions, tailored resume, and cover letter
+                  first.
+                </dd>
+              </div>
+            </dl>
           </div>
         )}
 
         {(stage === "uploading" || stage === "analyzing") && (
-          <div className="flex h-full min-h-48 flex-col items-center justify-center text-center">
+          <div className="flex h-full min-h-[26rem] flex-col items-center justify-center text-center">
             <div
               aria-hidden="true"
-              className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 dark:border-zinc-700 dark:border-t-zinc-50"
+              className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-accent"
             />
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="mt-5 text-sm font-semibold text-ink">
               {stage === "uploading"
-                ? "Uploading and extracting resume text…"
-                : "The AI provider is generating the analysis. This can take up to a minute."}
+                ? "Uploading and extracting your resume"
+                : "Building your analysis"}
+            </p>
+            <p className="mt-1 max-w-xs text-xs leading-5 text-muted">
+              {stage === "uploading"
+                ? "This usually takes a few seconds."
+                : "Generating the score, suggestions, resume, and cover letter can take up to a minute."}
             </p>
           </div>
         )}
 
         {stage === "error" && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
-            <h3 className="text-sm font-medium text-red-800 dark:text-red-300">
+          <div className="rounded-2xl bg-surface-muted p-5 ring-1 ring-line">
+            <p className="ui-eyebrow text-danger">
               {errorIsAuth ? "Session expired" : "Analysis failed"}
-            </h3>
-            <p className="mt-1 text-sm leading-relaxed text-red-700 dark:text-red-400">
-              {error}
             </p>
+            <h3 className="ui-display mt-3 text-2xl text-ink">
+              {errorIsAuth
+                ? "Sign in again to continue."
+                : "That analysis did not finish."}
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-ink-soft">{error}</p>
             {errorIsAuth ? (
               <Link
                 href="/login?redirect=/apps/resume-ats"
-                className="mt-3 inline-flex items-center rounded-lg bg-red-700 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:bg-red-300 dark:text-red-950 dark:hover:bg-red-200"
+                className="ui-button ui-button-primary mt-5"
               >
                 Sign in again
               </Link>
@@ -285,7 +366,7 @@ export function AtsWorkspace() {
               <button
                 type="button"
                 onClick={reset}
-                className="mt-3 inline-flex items-center rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900"
+                className="ui-button ui-button-secondary mt-5"
               >
                 Try again
               </button>
@@ -298,62 +379,179 @@ export function AtsWorkspace() {
             {result.job_description_warning !== null && (
               <div
                 role="alert"
-                className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-400"
+                className="mb-6 border-l-2 border-amber-500 bg-surface-muted px-4 py-3 text-sm leading-6 text-ink-soft"
               >
                 {result.job_description_warning}
               </div>
             )}
 
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-50">
-                  ATS analysis complete
-                </h2>
-                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                  Score computed by the deterministic matching engine.
-                </p>
+            <div className="border-b border-line pb-6">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="ui-eyebrow">Estimated match</p>
+                  <h2 className="ui-display mt-2 text-3xl text-ink">
+                    {result.score_label}
+                  </h2>
+                  <p className="mt-2 max-w-md text-sm leading-6 text-muted">
+                    {result.requirement_coverage != null && (
+                      <>
+                        Requirement coverage{" "}
+                        <strong className="font-semibold text-ink">
+                          {result.requirement_coverage}%
+                        </strong>
+                        {" · "}Evidence confidence{" "}
+                        <strong className="font-semibold text-ink">
+                          {result.evidence_confidence ?? 0}%
+                        </strong>
+                        .{" "}
+                      </>
+                    )}
+                    This is an estimate from your resume and this job
+                    description, not an employer&apos;s ATS score.
+                  </p>
+                </div>
+                <div className="flex items-end gap-2">
+                  <span
+                    className={`ui-display text-7xl leading-none ${scoreTone}`}
+                  >
+                    {result.ats_score}
+                  </span>
+                  <span className="mb-2 text-xs font-medium text-muted">
+                    / 100
+                  </span>
+                </div>
               </div>
-              <div className="text-right">
-                <div className="text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-                  {result.ats_score}
-                </div>
-                <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  {result.score_label}
-                </div>
+              <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted">
+                <span>
+                  <strong className="font-semibold text-ink">
+                    {result.matching_keywords.length}
+                  </strong>{" "}
+                  matched keywords
+                </span>
+                <span>
+                  <strong className="font-semibold text-ink">
+                    {result.partial_keywords.length}
+                  </strong>{" "}
+                  partial keywords
+                </span>
+                <span>
+                  <strong className="font-semibold text-ink">
+                    {result.unverified_keywords?.length ?? 0}
+                  </strong>{" "}
+                  unverified keywords
+                </span>
+                <span>
+                  <strong className="font-semibold text-ink">
+                    {result.missing_keywords.length}
+                  </strong>{" "}
+                  missing keywords
+                </span>
               </div>
             </div>
 
-            <KeywordSection
-              title="Matching keywords"
-              keywords={result.matching_keywords}
-              tone="matched"
-            />
-            <KeywordSection
-              title="Transferable / partial matches"
-              keywords={result.partial_keywords}
-              tone="partial"
-            />
-            <KeywordSection
-              title="Missing keywords"
-              keywords={result.missing_keywords}
-              tone="missing"
-            />
+            {result.ats_score === 0 && (
+              <p className="mt-5 border-l-2 border-amber-500 bg-surface-muted px-4 py-3 text-sm leading-6 text-ink-soft">
+                None of the requirements detected in this job description
+                were found in your resume, so the estimated score is 0.
+                Review the requirement evidence below to see exactly what
+                was checked.
+              </p>
+            )}
+
+            {result.score_breakdown !== null &&
+              result.score_breakdown.length > 0 && (
+                <details className="group border-b border-line">
+                  <summary className="flex cursor-pointer items-center justify-between py-4 text-sm font-semibold text-ink marker:content-none">
+                    Score breakdown
+                    <span
+                      aria-hidden="true"
+                      className="text-muted transition-transform group-open:rotate-180"
+                    >
+                      ▾
+                    </span>
+                  </summary>
+                  <ul>
+                    {result.score_breakdown.map((entry) => (
+                      <li
+                        key={entry.category}
+                        className="flex flex-wrap items-baseline justify-between gap-2 py-2.5 text-sm"
+                      >
+                        <span className="font-medium text-ink">
+                          {CATEGORY_LABELS[entry.category] ?? entry.category}
+                        </span>
+                        <span className="text-xs text-muted">
+                          {entry.score}% · {entry.supported}/{entry.total} matched
+                          {" · "}
+                          {entry.partial} partial · {entry.unverified ?? 0}{" "}
+                          unverified · {entry.missing} missing
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+            <details className="group border-b border-line">
+              <summary className="flex cursor-pointer items-center justify-between py-4 text-sm font-semibold text-ink marker:content-none">
+                How is this score calculated?
+                <span
+                  aria-hidden="true"
+                  className="text-muted transition-transform group-open:rotate-180"
+                >
+                  ▾
+                </span>
+              </summary>
+              <p className="pb-4 text-sm leading-6 text-muted">
+                Every meaningful requirement in the job description is
+                grouped into skills, experience, responsibilities,
+                qualifications, achievements, or communication, then
+                checked against the resume. Requirements are marked
+                matched, partial, unverified (the term appears without
+                enough context), or missing. The estimate combines
+                weighted requirement coverage with evidence confidence
+                across those dimensions. It is an estimate, not a
+                reproduction of any employer&apos;s ATS.
+              </p>
+            </details>
+
+            <div className="mt-6 grid gap-0 border-b border-line pb-6 sm:grid-cols-2 sm:divide-x sm:divide-line lg:grid-cols-4">
+              <KeywordColumn
+                title="Matched"
+                keywords={result.matching_keywords}
+                tone="matched"
+              />
+              <KeywordColumn
+                title="Partial"
+                keywords={result.partial_keywords}
+                tone="partial"
+              />
+              <KeywordColumn
+                title="Unverified"
+                keywords={result.unverified_keywords ?? []}
+                tone="unverified"
+              />
+              <KeywordColumn
+                title="Missing"
+                keywords={result.missing_keywords}
+                tone="missing"
+              />
+            </div>
 
             <EvidenceSection requirements={result.requirement_analysis} />
 
             {result.writing_review !== null &&
               result.writing_review.issues.length > 0 && (
-                <details className="group mb-3 rounded-lg border border-amber-200 dark:border-amber-900">
-                  <summary className="flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 text-sm font-medium text-amber-900 marker:content-none hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950">
+                <details className="group border-b border-line">
+                  <summary className="flex cursor-pointer items-center justify-between py-4 text-sm font-semibold text-ink marker:content-none">
                     Writing quality notes ({result.writing_review.issues.length})
                     <span
                       aria-hidden="true"
-                      className="text-amber-600 transition-transform group-open:rotate-180 dark:text-amber-400"
+                      className="text-muted transition-transform group-open:rotate-180"
                     >
                       ▾
                     </span>
                   </summary>
-                  <ul className="list-disc space-y-1 border-t border-amber-100 px-4 py-3 pl-9 text-sm leading-relaxed text-amber-800 dark:border-amber-900 dark:text-amber-400">
+                  <ul className="list-disc space-y-1 pb-4 pl-5 text-sm leading-6 text-muted">
                     {result.writing_review.issues.map((issue) => (
                       <li key={issue.code + issue.message}>{issue.message}</li>
                     ))}
@@ -361,57 +559,49 @@ export function AtsWorkspace() {
                 </details>
               )}
 
-            {result.improvement_suggestions && (
-              <TextSection
-                title="Improvement suggestions"
-                text={result.improvement_suggestions}
+            {(result.improvement_suggestions ||
+              result.tailored_resume ||
+              hasCoverLetter) && (
+              <AiOutputPanel
+                result={result}
+                activeTab={
+                  resultTab === "suggestions" && result.improvement_suggestions
+                    ? "suggestions"
+                    : resultTab === "resume" && result.tailored_resume
+                      ? "resume"
+                      : resultTab === "cover" && hasCoverLetter
+                        ? "cover"
+                        : result.improvement_suggestions
+                          ? "suggestions"
+                          : result.tailored_resume
+                            ? "resume"
+                            : "cover"
+                }
+                onTabChange={setResultTab}
+                downloading={downloading}
+                downloadingCoverLetter={downloadingCoverLetter}
+                onDownload={handleDownload}
+                onDownloadCoverLetter={handleDownloadCoverLetter}
               />
-            )}
-            {result.tailored_resume && (
-              <TextSection title="Tailored resume" text={result.tailored_resume} />
-            )}
-            {hasCoverLetter && (
-              <TextSection title="Cover letter" text={coverLetterText} />
             )}
 
             {downloadError !== null && (
               <div
                 role="alert"
-                className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-400"
+                className="mt-5 border-l-2 border-danger bg-surface-muted px-4 py-3 text-sm leading-6 text-ink-soft"
               >
                 {downloadError}
               </div>
             )}
 
-            <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-zinc-100 pt-5 dark:border-zinc-800">
-              {result.tailored_resume && (
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  disabled={downloading}
-                  aria-label="Download tailored resume as a DOCX file"
-                  className="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:focus-visible:outline-zinc-50"
-                >
-                  {downloading ? "Preparing DOCX…" : "Download tailored resume (DOCX)"}
-                </button>
-              )}
-              {hasCoverLetter && (
-                <button
-                  type="button"
-                  onClick={handleDownloadCoverLetter}
-                  disabled={downloadingCoverLetter}
-                  aria-label="Download cover letter as a DOCX file"
-                  className="inline-flex items-center justify-center rounded-lg border border-zinc-900 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-50 dark:text-zinc-50 dark:hover:bg-zinc-800 dark:focus-visible:outline-zinc-50"
-                >
-                  {downloadingCoverLetter
-                    ? "Preparing DOCX…"
-                    : "Download cover letter (DOCX)"}
-                </button>
-              )}
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <p className="font-mono text-[11px] text-muted">
+                Analysis {result.analysis_id.slice(0, 8)}
+              </p>
               <button
                 type="button"
                 onClick={reset}
-                className="inline-flex items-center rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                className="ui-button ui-button-secondary"
               >
                 New analysis
               </button>
@@ -419,54 +609,69 @@ export function AtsWorkspace() {
           </div>
         )}
       </section>
+      </div>
     </div>
   );
 }
 
-function KeywordSection({
+function KeywordColumn({
   title,
   keywords,
   tone,
 }: {
   title: string;
   keywords: string[];
-  tone: "matched" | "missing" | "partial";
+  tone: "matched" | "missing" | "partial" | "unverified";
 }) {
-  if (keywords.length === 0) {
-    return null;
-  }
   const chip =
     tone === "matched"
-      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-400"
+      ? "bg-success/10 text-success"
       : tone === "partial"
-        ? "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-400"
-        : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400";
+        ? "bg-accent-soft text-accent"
+        : tone === "unverified"
+          ? "bg-surface-muted text-ink"
+          : "bg-surface-muted text-muted";
   return (
-    <section className="mb-5">
-      <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+    <section className="py-4 first:pt-0 last:pb-0 sm:px-5 sm:py-0 sm:first:pl-0 sm:last:pr-0">
+      <h3 className="mb-3 flex items-center justify-between text-sm font-semibold text-ink">
         {title}
+        <span className="font-mono text-[11px] font-normal text-muted">
+          {keywords.length}
+        </span>
       </h3>
-      <ul className="flex flex-wrap gap-1.5">
-        {keywords.map((keyword) => (
-          <li
-            key={keyword}
-            className={`rounded-md px-2 py-1 text-xs ${chip}`}
-          >
-            {keyword}
-          </li>
-        ))}
-      </ul>
+      {keywords.length === 0 ? (
+        <p className="text-xs text-muted">None detected</p>
+      ) : (
+        <ul className="flex flex-wrap gap-1.5">
+          {keywords.map((keyword) => (
+            <li key={keyword} className={`rounded-md px-2 py-1 text-xs ${chip}`}>
+              {keyword}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  matched: "Matched",
+  supported: "Matched",
+  partial: "Partial",
+  unverified: "Unverified",
+  missing: "Missing",
+};
+
 const CATEGORY_LABELS: Record<string, string> = {
+  skills: "Skills",
+  experience: "Experience",
+  responsibilities: "Responsibilities",
+  qualifications: "Qualifications",
+  achievements: "Achievements",
+  communication: "Communication",
   essential: "Essential",
   preferred: "Preferred",
   technical_skills: "Technical skill",
-  responsibilities: "Responsibility",
-  experience: "Experience",
-  communication: "Communication",
 };
 
 function EvidenceSection({
@@ -478,36 +683,42 @@ function EvidenceSection({
     return null;
   }
   return (
-    <details className="group mb-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
-      <summary className="flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 text-sm font-medium text-zinc-900 marker:content-none hover:bg-zinc-50 dark:text-zinc-50 dark:hover:bg-zinc-900">
+    <details className="group border-b border-line">
+      <summary className="flex cursor-pointer items-center justify-between py-4 text-sm font-semibold text-ink marker:content-none">
         Requirement evidence
         <span
           aria-hidden="true"
-          className="text-zinc-400 transition-transform group-open:rotate-180"
+          className="text-muted transition-transform group-open:rotate-180"
         >
           ▾
         </span>
       </summary>
-      <div className="space-y-2 border-t border-zinc-100 px-4 py-3 dark:border-zinc-800">
+      <div className="space-y-4 pb-5">
         {requirements.map((requirement) => (
           <div key={requirement.term}>
             <p className="text-sm">
-              <span className="font-medium text-zinc-900 dark:text-zinc-50">
+              <span className="font-semibold text-ink">
                 {requirement.term}
               </span>{" "}
-              <span className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              <span className="text-xs uppercase tracking-wide text-muted">
                 {CATEGORY_LABELS[requirement.category] ?? requirement.category} ·{" "}
-                {requirement.status}
+                {STATUS_LABELS[requirement.status] ?? requirement.status}
+                {requirement.mandatory === false ? " · Preferred" : ""}
               </span>
             </p>
+            {requirement.detail ? (
+              <p className="mt-1 text-xs leading-5 text-muted">
+                {requirement.detail}
+              </p>
+            ) : null}
             {requirement.evidence.length > 0 ? (
-              <ul className="ml-4 mt-1 list-disc space-y-0.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+              <ul className="mt-1.5 space-y-0.5 border-l border-line pl-3 text-xs leading-5 text-muted">
                 {requirement.evidence.map((line) => (
                   <li key={line}>“{line}”</li>
                 ))}
               </ul>
             ) : (
-              <p className="ml-4 mt-1 text-xs text-zinc-500 dark:text-zinc-500">
+              <p className="mt-1.5 text-xs text-muted">
                 No evidence in the resume.
               </p>
             )}
@@ -518,21 +729,112 @@ function EvidenceSection({
   );
 }
 
-function TextSection({ title, text }: { title: string; text: string }) {
+function AiOutputPanel({
+  result,
+  activeTab,
+  onTabChange,
+  downloading,
+  downloadingCoverLetter,
+  onDownload,
+  onDownloadCoverLetter,
+}: {
+  result: AtsAnalysisData;
+  activeTab: ResultTab;
+  onTabChange: (tab: ResultTab) => void;
+  downloading: boolean;
+  downloadingCoverLetter: boolean;
+  onDownload: () => void;
+  onDownloadCoverLetter: () => void;
+}) {
+  const tabs: { id: ResultTab; label: string; visible: boolean }[] = [
+    {
+      id: "suggestions",
+      label: "Suggestions",
+      visible: Boolean(result.improvement_suggestions),
+    },
+    {
+      id: "resume",
+      label: "Tailored resume",
+      visible: Boolean(result.tailored_resume),
+    },
+    {
+      id: "cover",
+      label: "Cover letter",
+      visible: Boolean((result.cover_letter ?? "").trim()),
+    },
+  ];
+  const visible = tabs.filter((tab) => tab.visible);
+
   return (
-    <details className="group mb-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
-      <summary className="flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 text-sm font-medium text-zinc-900 marker:content-none hover:bg-zinc-50 dark:text-zinc-50 dark:hover:bg-zinc-900">
-        {title}
-        <span
-          aria-hidden="true"
-          className="text-zinc-400 transition-transform group-open:rotate-180"
-        >
-          ▾
-        </span>
-      </summary>
-      <div className="whitespace-pre-wrap border-t border-zinc-100 px-4 py-3 text-sm leading-relaxed text-zinc-700 dark:border-zinc-800 dark:text-zinc-300">
-        {text}
+    <section aria-labelledby="ai-output-heading" className="mt-7">
+      <h3 id="ai-output-heading" className="ui-eyebrow">
+        Generated documents
+      </h3>
+      <div
+        role="tablist"
+        aria-label="Generated documents"
+        className="mt-3 flex flex-wrap gap-6 border-b border-line"
+      >
+        {visible.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            onClick={() => onTabChange(tab.id)}
+            className={`-mb-px border-b-2 pb-2.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+              activeTab === tab.id
+                ? "border-accent text-ink"
+                : "border-transparent text-muted hover:text-ink"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
-    </details>
+      <div className="pt-5">
+        {activeTab === "suggestions" && result.improvement_suggestions && (
+          <div className="whitespace-pre-wrap text-sm leading-7 text-ink-soft">
+            {result.improvement_suggestions}
+          </div>
+        )}
+        {activeTab === "resume" && result.tailored_resume && (
+          <>
+            <div className="whitespace-pre-wrap text-sm leading-7 text-ink-soft">
+              {result.tailored_resume}
+            </div>
+            <div className="mt-5 flex justify-end border-t border-line pt-4">
+              <button
+                type="button"
+                onClick={onDownload}
+                disabled={downloading}
+                aria-label="Download tailored resume as a DOCX file"
+                className="ui-button ui-button-primary"
+              >
+                {downloading ? "Preparing DOCX…" : "Download DOCX"}
+              </button>
+            </div>
+          </>
+        )}
+        {activeTab === "cover" && (result.cover_letter ?? "").trim() && (
+          <>
+            <div className="whitespace-pre-wrap text-sm leading-7 text-ink-soft">
+              {result.cover_letter}
+            </div>
+            <div className="mt-5 flex justify-end border-t border-line pt-4">
+              <button
+                type="button"
+                onClick={onDownloadCoverLetter}
+                disabled={downloadingCoverLetter}
+                aria-label="Download cover letter as a DOCX file"
+                className="ui-button ui-button-secondary"
+              >
+                {downloadingCoverLetter ? "Preparing DOCX…" : "Download DOCX"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
   );
 }

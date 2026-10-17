@@ -139,7 +139,7 @@ def run_ats_analysis(
         )
     except WorkflowNotFoundError as exc:
         raise ProviderNotAvailableError(
-            "The AI provider is not configured. Set OPENAI_API_KEY "
+            "The AI provider is not configured. Set AI_API_KEY (or DEEPSEEK_API_KEY) "
             "in the environment or .env file to enable ATS analysis."
         ) from exc
     except ProviderError as exc:

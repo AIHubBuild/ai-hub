@@ -5,16 +5,17 @@ Versioned prompt templates for the approved three-step ATS workflow
 §8.1). Ported from the legacy `system_prompts.py` per §3.2 (KEEP) and
 §5 Phase 2 item 10, with the legacy `===marker===` output format
 replaced by structured instructions (the marker-parsing approach is
-explicitly rejected — §8.1).
+explicitly rejected, §8.1).
 
 Deliberately not registered: `ACHIEVEMENT_REWRITE_PROMPT` (no node in
 the approved workflow) and the legacy single-call Streamlit prompt.
 """
 
 from app.ai_core.prompts import PromptRegistry, PromptTemplate
+from app.ai_core.writing_style import SHARED_STYLE_GUIDE
 
 # ---------------------------------------------------------------
-# 1. Analysis node — improvement suggestions.
+# 1. Analysis node, improvement suggestions.
 # The deterministic engine supplies the score and keyword lists;
 # this node produces actionable suggestions only (no markers).
 # ---------------------------------------------------------------
@@ -76,7 +77,7 @@ ATS_ANALYSIS_TEMPLATE = PromptTemplate(
         "- Recommend more natural operational wording\n"
         "- Recommend stronger business impact language\n"
         "\n"
-        "BUSINESS IMPACT EVALUATION — strong resumes should demonstrate:\n"
+        "BUSINESS IMPACT EVALUATION, strong resumes should demonstrate:\n"
         "reduced downtime, improved response times, improved user experience, "
         "SLA compliance, operational continuity, support efficiency, process "
         "improvement, troubleshooting effectiveness.\n"
@@ -160,7 +161,7 @@ TAILORED_RESUME_TEMPLATE = PromptTemplate(
         "- Only include technologies when contextually relevant to actual "
         "responsibilities or projects\n"
         "\n"
-        "BUSINESS IMPACT OPTIMIZATION — where possible, emphasize:\n"
+        "BUSINESS IMPACT OPTIMIZATION, where possible, emphasize:\n"
         "reduced downtime, improved response times, operational continuity, "
         "SLA compliance, user satisfaction, support efficiency, "
         "troubleshooting outcomes, workflow improvements.\n"
@@ -267,7 +268,7 @@ COVER_LETTER_TEMPLATE = PromptTemplate(
         "- Keep wording conversational and recruiter-friendly\n"
         "- Use operational language instead of AI-generated fluff\n"
         "\n"
-        "BUSINESS VALUE FOCUS — where appropriate, connect the candidate's "
+        "BUSINESS VALUE FOCUS, where appropriate, connect the candidate's "
         "experience to: supporting operational continuity, improving user "
         "support, maintaining reliable IT operations, troubleshooting "
         "effectiveness, endpoint support, collaboration with IT teams, "
@@ -308,7 +309,7 @@ PROMPT_TEMPLATES = [
 ]
 
 # ---------------------------------------------------------------
-# Version 2 additions — evidence-backed accuracy rules.
+# Version 2 additions, evidence-backed accuracy rules.
 # Registered as later versions of the same prompt ids; the registry
 # resolves the latest version at invocation time.
 # ---------------------------------------------------------------
@@ -324,8 +325,8 @@ _ANALYSIS_V2_ADDITIONS = (
     "- For every recommendation that references a requirement, cite the "
     "resume evidence listed above. Do not claim evidence that is not "
     "there.\n"
-    "- For each missing requirement, suggest honest ways to address it — "
-    "projects, certifications, structured learning — never inventing or "
+    "- For each missing requirement, suggest honest ways to address it, "
+    "projects, certifications, structured learning, never inventing or "
     "exaggerating experience.\n"
 )
 
@@ -340,7 +341,7 @@ _TAILORED_RESUME_V2_ADDITIONS = (
     "master resume.\n"
     "- Clearly label lab work, coursework, training, and personal "
     "projects as such; never present them as professional employment.\n"
-    "- Only reorganize, emphasize, or reword existing resume content — "
+    "- Only reorganize, emphasize, or reword existing resume content, "
     "never add experience, metrics, certifications, employers, or skills "
     "that are not in the master resume.\n"
 )
@@ -387,7 +388,7 @@ PROMPT_TEMPLATES.extend(
 )
 
 # ---------------------------------------------------------------
-# Version 3 additions — natural-writing quality rules.
+# Version 3 additions, natural-writing quality rules.
 # The applicant's verified facts remain the source of truth; these
 # rules govern style only. ``{style_notes_section}`` is filled by the
 # workflow with any applicant-supplied style preferences (or empty).
@@ -458,6 +459,115 @@ PROMPT_TEMPLATES.extend(
     [
         TAILORED_RESUME_TEMPLATE_V3,
         COVER_LETTER_TEMPLATE_V3,
+    ]
+)
+
+
+
+# ---------------------------------------------------------------
+# Version 3/4: shared editorial style.
+# These are the latest versions used by the workflow. They keep the
+# factual rules from earlier versions and apply the shared style guide
+# plus task-specific writing instructions. ``{style_notes_section}`` is
+# filled by the workflow with any applicant-supplied preferences.
+# ---------------------------------------------------------------
+
+_ANALYSIS_V3_STYLE = (
+    "\n\n"
+    "TASK-SPECIFIC STYLE:\n"
+    "- Write a short set of specific recommendations, ordered by impact.\n"
+    "- Reference the resume evidence provided. Do not claim evidence "
+    "that is not there.\n"
+    "- For missing requirements, suggest honest ways to address them, "
+    "such as projects, certifications, or structured learning. Never "
+    "recommend invented experience, metrics, or credentials.\n"
+    "- Return plain text only, one recommendation per line. No markdown, "
+    "scores, keyword lists, or explanations."
+)
+
+_TAILORED_RESUME_V4_STYLE = (
+    "\n\n"
+    "TASK-SPECIFIC STYLE:\n"
+    "- Make the resume specific to this job description. Lead with the "
+    "experience, technologies, and outcomes that match the role.\n"
+    "- Rewrite only what the master resume supports. Preserve employers, "
+    "job titles, dates, qualifications, skills, responsibilities, "
+    "achievements, and contact details exactly.\n"
+    "- Never add metrics, achievements, credentials, technologies, or "
+    "experience that are not in the master resume. If a detail is "
+    "missing, leave it out instead of inventing or padding it.\n"
+    "- Use job-description keywords only where the verified experience "
+    "supports them. Do not keyword-stuff or repeat a term for ATS "
+    "effect.\n"
+    "- Keep claims at the candidate's actual level. Do not upgrade "
+    "responsibility, leadership, production scale, or years of "
+    "experience.\n"
+    "- Write natural, scannable bullets: start with an action, say what "
+    "was done, and include a result only when the source states it.\n"
+    "- Avoid repeated sentence openings and formulaic lists.\n"
+    "{style_notes_section}"
+)
+
+_COVER_LETTER_V4_STYLE = (
+    "\n\n"
+    "TASK-SPECIFIC STYLE:\n"
+    "- Open with a specific reason this role and this candidate fit. Do "
+    "not use \"I am writing to apply\" or generic enthusiasm.\n"
+    "- Connect two or three verified strengths to the job's actual "
+    "requirements. Do not retell the whole resume.\n"
+    "- Reference only experience and skills present in the optimized "
+    "resume. Do not introduce new claims, achievements, employers, or "
+    "imply that an unsupported requirement is met.\n"
+    "- Keep the letter to three or four short paragraphs. Plain text "
+    "only, no bullet points.\n"
+    "- Close with a simple, professional statement. Avoid \"I am "
+    "confident I would be a valuable addition\" and similar filler.\n"
+    "- Do not infer personality traits, motivations, or anecdotes the "
+    "applicant has not supplied.\n"
+    "{style_notes_section}"
+)
+
+ATS_ANALYSIS_TEMPLATE_V3 = PromptTemplate(
+    prompt_id="resume_ats/ats_analysis",
+    version=3,
+    system=ATS_ANALYSIS_TEMPLATE_V2.system,
+    user_template=(
+        ATS_ANALYSIS_TEMPLATE_V2.user_template
+        + "\n\n"
+        + SHARED_STYLE_GUIDE
+        + _ANALYSIS_V3_STYLE
+    ),
+)
+
+TAILORED_RESUME_TEMPLATE_V4 = PromptTemplate(
+    prompt_id="resume_ats/tailored_resume",
+    version=4,
+    system=TAILORED_RESUME_TEMPLATE_V2.system,
+    user_template=(
+        TAILORED_RESUME_TEMPLATE_V2.user_template
+        + "\n\n"
+        + SHARED_STYLE_GUIDE
+        + _TAILORED_RESUME_V4_STYLE
+    ),
+)
+
+COVER_LETTER_TEMPLATE_V4 = PromptTemplate(
+    prompt_id="resume_ats/cover_letter",
+    version=4,
+    system=COVER_LETTER_TEMPLATE_V2.system,
+    user_template=(
+        COVER_LETTER_TEMPLATE_V2.user_template
+        + "\n\n"
+        + SHARED_STYLE_GUIDE
+        + _COVER_LETTER_V4_STYLE
+    ),
+)
+
+PROMPT_TEMPLATES.extend(
+    [
+        ATS_ANALYSIS_TEMPLATE_V3,
+        TAILORED_RESUME_TEMPLATE_V4,
+        COVER_LETTER_TEMPLATE_V4,
     ]
 )
 

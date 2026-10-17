@@ -12,6 +12,9 @@ export interface RequirementEvidence {
   status: string;
   category: string;
   evidence: string[];
+  section?: string | null;
+  detail?: string;
+  mandatory?: boolean;
 }
 
 export interface ScoreBreakdown {
@@ -20,6 +23,7 @@ export interface ScoreBreakdown {
   total: number;
   supported: number;
   partial: number;
+  unverified?: number;
   missing: number;
   score: number;
 }
@@ -40,8 +44,11 @@ export interface AtsAnalysisData {
   run_id: string;
   ats_score: number;
   score_label: string;
+  requirement_coverage?: number | null;
+  evidence_confidence?: number | null;
   matching_keywords: string[];
   partial_keywords: string[];
+  unverified_keywords?: string[];
   missing_keywords: string[];
   requirement_analysis: RequirementEvidence[] | null;
   score_breakdown: ScoreBreakdown[] | null;

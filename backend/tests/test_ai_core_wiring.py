@@ -31,3 +31,50 @@ def test_get_ai_core_dependency_returns_app_instance():
 
     assert response.status_code == 200
     assert response.json() == {"same_instance": True}
+
+
+def test_support_model_is_configurable_via_settings():
+    from app.ai_core import create_ai_core
+    from app.core.config import Settings
+    from app.domains.support_copilot.domain import wire_support_copilot
+
+    ai_core = create_ai_core()
+    wire_support_copilot(
+        ai_core,
+        Settings(ai_provider="deepseek", support_model="deepseek-flash"),
+    )
+
+    config = ai_core.llm_factory.get_config("support_copilot")
+    assert config.model == "deepseek-flash"
+    assert config.provider == "deepseek"
+
+
+def test_resume_model_falls_back_to_shared_ai_model():
+    from app.ai_core import create_ai_core
+    from app.core.config import Settings
+    from app.domains.resume_ats.domain import wire_resume_ats
+    from app.domains.support_copilot.domain import wire_support_copilot
+
+    ai_core = create_ai_core()
+    settings = Settings(ai_provider="deepseek", ai_model="deepseek-flash")
+    wire_resume_ats(ai_core, settings)
+    wire_support_copilot(ai_core, settings)
+
+    assert ai_core.llm_factory.get_config("resume_ats").model == "deepseek-flash"
+    assert (
+        ai_core.llm_factory.get_config("support_copilot").model
+        == "deepseek-flash"
+    )
+
+
+def test_per_assistant_models_override_shared_model():
+    from app.core.config import Settings
+
+    settings = Settings(
+        ai_model="shared-model",
+        resume_ats_model="resume-model",
+        support_model="support-model",
+    )
+
+    assert settings.resume_model == "resume-model"
+    assert settings.support_model_name == "support-model"

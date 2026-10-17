@@ -29,12 +29,12 @@ export function LoginForm() {
     return (
       <div
         role="alert"
-        className="rounded-xl border border-zinc-200 bg-zinc-50 p-6 text-center dark:border-zinc-800 dark:bg-zinc-900"
+        className="rounded-2xl bg-surface p-6 text-center ring-1 ring-line/80"
       >
-        <h2 className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+        <h2 className="text-sm font-medium text-ink">
           Supabase is not configured
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+        <p className="mt-2 text-sm leading-6 text-muted">
           Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
           <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to enable
           authentication.
@@ -79,9 +79,9 @@ export function LoginForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+      className="rounded-2xl bg-surface p-6 ring-1 ring-line/80 sm:p-7"
     >
-      <div className="mb-5 flex rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-800">
+      <div className="mb-6 flex rounded-lg bg-surface-muted p-0.5">
         {(["sign-in", "sign-up"] as const).map((option) => (
           <button
             key={option}
@@ -92,10 +92,10 @@ export function LoginForm() {
               setNotice(null);
             }}
             aria-pressed={mode === option}
-            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 ${
+            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
               mode === option
-                ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
-                : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+                ? "bg-surface text-ink shadow-sm"
+                : "text-muted hover:text-ink"
             }`}
           >
             {option === "sign-in" ? "Sign in" : "Create account"}
@@ -105,7 +105,7 @@ export function LoginForm() {
 
       <label
         htmlFor="email"
-        className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+        className="mb-1.5 block text-sm font-medium text-ink"
       >
         Email
       </label>
@@ -116,12 +116,12 @@ export function LoginForm() {
         autoComplete="email"
         value={email}
         onChange={(event) => setEmail(event.target.value)}
-        className="w-full rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-sm text-zinc-900 focus:outline-2 focus:outline-offset-2 focus:outline-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
+        className="ui-field"
       />
 
       <label
         htmlFor="password"
-        className="mb-1.5 mt-4 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+        className="mb-1.5 mt-4 block text-sm font-medium text-ink"
       >
         Password
       </label>
@@ -133,19 +133,19 @@ export function LoginForm() {
         autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
         value={password}
         onChange={(event) => setPassword(event.target.value)}
-        className="w-full rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-sm text-zinc-900 focus:outline-2 focus:outline-offset-2 focus:outline-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
+        className="ui-field"
       />
 
       {error !== null && (
         <p
           role="alert"
-          className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400"
+          className="mt-4 border-l-2 border-danger bg-surface-muted px-3 py-2 text-sm text-ink-soft"
         >
           {error}
         </p>
       )}
       {notice !== null && (
-        <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-400">
+        <p className="mt-4 border-l-2 border-success bg-surface-muted px-3 py-2 text-sm text-ink-soft">
           {notice}
         </p>
       )}
@@ -153,7 +153,7 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={submitting}
-        className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:focus-visible:outline-zinc-50"
+        className="ui-button ui-button-primary mt-5 w-full"
       >
         {submitting
           ? "Please wait…"

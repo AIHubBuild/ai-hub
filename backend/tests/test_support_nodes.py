@@ -133,13 +133,14 @@ def test_ask_questions_password_reset_branch():
 def test_ask_questions_vpn_branch():
     output = ask_questions({"issue_type": "vpn_issue"})
 
-    assert "VPN error" in output["follow_up_question"]
+    assert "error code" in output["follow_up_question"]
+    assert "timeout" in output["follow_up_question"]
 
 
 def test_ask_questions_network_branch_distinguishes_paths():
     output = ask_questions({"issue_type": "network_issue"})
 
-    assert "Wi-Fi network at all" in output["follow_up_question"]
+    assert "connect to Wi-Fi at all" in output["follow_up_question"]
     assert "connected but web pages" in output["follow_up_question"]
 
 
@@ -148,9 +149,8 @@ def test_ask_questions_generic_fallback():
     assert output["follow_up_question"]  # targeted question exists
 
     output = ask_questions({"issue_type": "hardware_issue"})
-    assert output["follow_up_question"] == (
-        "Can you provide more details about the issue?"
-    )
+    assert "stop code" in output["follow_up_question"]
+    assert "Windows update" in output["follow_up_question"]
 
 
 def test_troubleshoot_uses_knowledge_base_and_user_message():
@@ -174,11 +174,45 @@ def test_troubleshoot_uses_knowledge_base_and_user_message():
     assert "<user_message>" in prompt
 
 
-def test_troubleshoot_uses_latest_prompt_version_with_context_rules():
-    from app.domains.support_copilot.prompts import TROUBLESHOOT_TEMPLATE_V2
+def test_troubleshoot_output_normalizes_em_dashes():
+    client = ScriptedClient([
+        "Check the VPN adapter status \u2014 then reconnect the client."
+    ])
+    node = make_troubleshoot_node(client, make_registry())
 
+    output = node(
+        {
+            "knowledge_base": "VPN GUIDE: check adapter status",
+            "conversation_history": "user: VPN broken",
+            "issue_type": "vpn_issue",
+            "user_issue": "VPN error 809",
+        }
+    )
+
+    assert "\u2014" not in output["resolution"]
+    assert "Check the VPN adapter status, then reconnect" in output["resolution"]
+
+
+def test_root_cause_output_normalizes_em_dashes():
+    client = ScriptedClient([
+        "Issue: VPN\nSuspected Cause: adapter state \u2014 unconfirmed"
+    ])
+    node = make_root_cause_node(client, make_registry())
+
+    output = node(
+        {
+            "issue_type": "vpn_issue",
+            "conversation_history": "user: VPN broken",
+        }
+    )
+
+    assert "\u2014" not in output["root_cause_summary"]
+    assert "adapter state, unconfirmed" in output["root_cause_summary"]
+
+
+def test_troubleshoot_uses_latest_prompt_version_with_context_rules():
     registry = make_registry()
-    assert registry.get("support_copilot/troubleshoot").version == 3
+    assert registry.get("support_copilot/troubleshoot").version == 7
 
     client = ScriptedClient(["Check the update history first."])
     node = make_troubleshoot_node(client, registry)
@@ -198,6 +232,41 @@ def test_troubleshoot_uses_latest_prompt_version_with_context_rules():
     assert "Do NOT claim a root cause is confirmed" in prompt
     assert "CRITICAL_PROCESS_DIED" in prompt
     assert "Windows Recovery" in prompt
+    assert "SHARED WRITING STYLE" in prompt
+    assert "one primary troubleshooting action at a time" in prompt
+    assert "diagnostic_context" in prompt
+
+
+def test_troubleshoot_prompt_forbids_invented_kb_citations():
+    from app.domains.support_copilot.prompts import TROUBLESHOOT_TEMPLATE_V7
+
+    template = TROUBLESHOOT_TEMPLATE_V7.user_template
+
+    assert "Never invent internal procedures" in template
+    assert "Only cite section names, document titles, or references that appear verbatim" in template
+    assert "at most three short numbered steps" in template
+    assert "at most two focused clarifying questions" in template
+    assert "no relevant guidance" in template
+    assert "explicit confirmation" in template
+
+
+def test_troubleshoot_node_includes_diagnostic_context():
+    client = ScriptedClient(["Check the adapter state next."])
+    node = make_troubleshoot_node(client, make_registry())
+
+    node(
+        {
+            "knowledge_base": "VPN GUIDE",
+            "conversation_history": "user: VPN broken",
+            "diagnostic_context": "1. Copilot: Restart the client. User result: still failing.",
+            "issue_type": "vpn_issue",
+            "user_issue": "Still failing",
+        }
+    )
+
+    prompt = client.calls[0]["user"]
+    assert "Restart the client" in prompt
+    assert "still failing" in prompt
 
 
 def test_escalate_flags_critical_issues():

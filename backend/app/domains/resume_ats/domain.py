@@ -17,20 +17,23 @@ from app.domains.resume_ats.prompts import register_prompts
 from app.domains.resume_ats.workflow import ATS_WORKFLOW_ID, build_ats_workflow
 
 DOMAIN = "resume_ats"
-PROVIDER = "openai"
 
 
 def wire_resume_ats(ai_core: AICore, settings: Settings) -> None:
-    """Register prompts, model config, and workflow."""
+    """Register prompts, model config, and workflow.
+
+    The provider registry name, model id, and timeout all come from
+    settings so switching provider/model needs no code change.
+    """
     register_prompts(ai_core.prompts)
 
     ai_core.llm_factory.register_config(
         DomainModelConfig(
             domain=DOMAIN,
-            provider=PROVIDER,
-            model=settings.openai_model,
+            provider=settings.ai_provider_name,
+            model=settings.resume_model,
             temperature=0.4,
-            timeout_seconds=int(settings.openai_timeout_seconds),
+            timeout_seconds=int(settings.ai_timeout_seconds),
         )
     )
 

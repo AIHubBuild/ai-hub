@@ -41,18 +41,56 @@ RESOLVED_KEYWORDS = [
     "working again",
 ]
 
-# Escalation phrases (substring match) and single words (word-boundary
-# match). Word boundaries prevent false triggers from error codes like
-# CRITICAL_PROCESS_DIED (which contains "critical" but is not an
-# escalation request).
-ESCALATION_PHRASES = [
-    "still not working",
-    "affecting everyone",
-    "cannot work",
-    "business impact",
+# Business-impact words use word boundaries so error codes such as
+# CRITICAL_PROCESS_DIED do not trigger an escalation request.
+ESCALATION_WORDS = ["urgent", "critical", "outage"]
+
+# Explicit human-handoff requests. These request escalation; they do not
+# mean a human has accepted the ticket.
+HUMAN_HANDOFF_PHRASES = [
+    "speak to a human",
+    "talk to a human",
+    "speak to a person",
+    "talk to a person",
+    "real person",
+    "human support",
+    "need a human",
+    "want a human",
+    "escalate this",
+    "escalate the ticket",
+    "escalate to support",
+    "raise this with support",
 ]
 
-ESCALATION_WORDS = ["urgent", "critical", "outage"]
+# Significant business-impact phrases.
+BUSINESS_IMPACT_PHRASES = [
+    "affecting everyone",
+    "whole team",
+    "all users",
+    "company wide",
+    "company-wide",
+    "office is down",
+    "business impact",
+    "cannot work",
+    "can't work",
+    "unable to work",
+    "is down for",
+]
+
+# Situations where the next safe step needs permissions or expertise the
+# Copilot does not have.
+ELEVATED_ACCESS_PHRASES = [
+    "no admin",
+    "don't have admin",
+    "do not have admin",
+    "need admin",
+    "requires admin",
+    "administrator rights",
+    "no administrator rights",
+    "can't install",
+    "cannot install",
+    "permission denied to install",
+]
 
 # Gratitude / conversational-closure phrases.
 GRATITUDE_KEYWORDS = [
@@ -92,9 +130,12 @@ STATUS_OPEN = "Open"
 STATUS_IN_PROGRESS = "In Progress"
 STATUS_AWAITING_CONFIRMATION = "Awaiting Confirmation"
 STATUS_RESOLVED = "Resolved"
+STATUS_ESCALATION_REQUESTED = "Escalation Requested"
 STATUS_ESCALATED = "Escalated"
 
-# Terminal states: no keyword may regress a ticket out of them.
+# Escalation Requested means a handoff was requested but not accepted.
+# Escalated is reserved for a confirmed human handoff.
+# Terminal states cannot regress.
 TERMINAL_STATUSES = {STATUS_RESOLVED, STATUS_ESCALATED}
 
 _ESCALATION_WORD_PATTERN = re.compile(
@@ -102,15 +143,26 @@ _ESCALATION_WORD_PATTERN = re.compile(
 )
 
 
-def _has_escalation_keywords(message: str) -> bool:
+def requests_human_handoff(message: str) -> bool:
+    lowered = message.lower()
+    return any(phrase in lowered for phrase in HUMAN_HANDOFF_PHRASES)
+
+
+def has_business_impact(message: str) -> bool:
+    lowered = message.lower()
     return (
-        any(phrase in message for phrase in ESCALATION_PHRASES)
-        or _ESCALATION_WORD_PATTERN.search(message) is not None
+        any(phrase in lowered for phrase in BUSINESS_IMPACT_PHRASES)
+        or _ESCALATION_WORD_PATTERN.search(lowered) is not None
     )
 
 
+def needs_elevated_access(message: str) -> bool:
+    lowered = message.lower()
+    return any(phrase in lowered for phrase in ELEVATED_ACCESS_PHRASES)
+
+
 def build_ticket(issue_type: str, escalation_needed: bool) -> dict:
-    """Ticket fields for a new ticket (legacy generate_ticket logic)."""
+    """Ticket fields for a new ticket."""
     mapping = ISSUE_TEAM_MAPPING.get(issue_type, TICKET_DEFAULTS)
     ticket = {
         "priority": mapping["priority"],
@@ -119,17 +171,19 @@ def build_ticket(issue_type: str, escalation_needed: bool) -> dict:
     }
     if escalation_needed:
         ticket["priority"] = "High"
+        ticket["status"] = STATUS_ESCALATION_REQUESTED
     return ticket
 
 
 def apply_ticket_status(status: str, user_message: str) -> str:
     """Advance the ticket status machine (legacy update_ticket_status).
 
-    Keyword order and semantics are preserved, with three corrections:
-    escalation keywords use word boundaries (so error codes like
-    CRITICAL_PROCESS_DIED do not trigger escalation); terminal states
-    (Resolved, Escalated) cannot regress; and negated phrasing
-    ("not fixed", "no thanks, still broken") never counts as closure.
+    Resolution keywords still require explicit confirmation before a
+    ticket is resolved. Escalation is decided separately by the service
+    using defined criteria, so a failed troubleshooting step alone never
+    changes the ticket to an escalation state. Terminal states (Resolved,
+    Escalated) cannot regress, and negated phrasing never counts as
+    closure.
     """
     if status in TERMINAL_STATUSES:
         return status
@@ -146,9 +200,6 @@ def apply_ticket_status(status: str, user_message: str) -> str:
 
     if not negated and any(keyword in message for keyword in RESOLVED_KEYWORDS):
         return STATUS_AWAITING_CONFIRMATION
-
-    if _has_escalation_keywords(message):
-        return STATUS_ESCALATED
 
     if status == STATUS_OPEN:
         return STATUS_IN_PROGRESS

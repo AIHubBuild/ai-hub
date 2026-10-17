@@ -111,12 +111,15 @@ def test_vantage_scenario_categorizes_and_scores():
     assert by_term["dns"].status == MISSING
 
     categories = {entry.category: entry for entry in analysis.breakdown}
-    assert categories["essential"].score > 0
-    assert categories["technical_skills"].score > 0
-    assert categories["preferred"].score == 0
-    assert "communication" not in {
-        entry.category for entry in analysis.breakdown
-    } or categories["communication"].weight == 0
+    assert categories["experience"].score > 0
+    assert categories["responsibilities"].score > 0
+    assert categories["skills"].score > 0
+    assert categories["qualifications"].score < 50
+    assert categories["communication"].weight == 0.05
+    # The estimate is not a perfect score: DNS/DHCP, TCP/IP, and ITIL are
+    # still missing or unverified, and the score combines coverage with
+    # evidence confidence across dimensions.
+    assert 0 < analysis.estimated_score < 100
 
     assert 0 <= analysis.estimated_score <= 100
     assert analysis.estimated_score == analysis.estimated_score  # deterministic
@@ -157,9 +160,7 @@ def test_transferable_skills_are_partial_not_supported():
     assert by_term["microsoft 365"].status == PARTIAL
     assert by_term["itil"].status == MISSING
     assert set(analysis.partial_terms) == {"technical support", "microsoft 365"}
-    # Partial coverage: essential 2 partial -> 50; preferred missing -> 0.
-    # estimated = (0.35*50 + 0.10*0)/0.45 -> 39
-    assert analysis.estimated_score == 39
+    assert analysis.estimated_score < 50
 
 
 # ---------------------------------------------------------------

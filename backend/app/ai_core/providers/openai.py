@@ -36,28 +36,43 @@ class OpenAIProvider:
         base_url: str = "",
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         client: httpx.Client | None = None,
+        thinking: bool | None = None,
+        reasoning_effort: str | None = None,
     ):
         self._api_key = api_key
         self._base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
         self._timeout = timeout_seconds
+        # DeepSeek enables thinking mode by default (temperature is then
+        # ignored). None omits the field so other OpenAI-compatible
+        # providers are unaffected.
+        self._thinking = thinking
+        self._reasoning_effort = (reasoning_effort or "").strip() or None
         # Own client by default; tests inject a client with a mock transport.
         self._client = client or httpx.Client(timeout=self._timeout)
 
     def complete(
         self, *, system: str, user: str, model: str, temperature: float
     ) -> str:
+        payload = {
+            "model": model,
+            "temperature": temperature,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        }
+        if self._thinking is not None:
+            payload["thinking"] = {
+                "type": "enabled" if self._thinking else "disabled"
+            }
+        if self._thinking is not False and self._reasoning_effort:
+            payload["reasoning_effort"] = self._reasoning_effort
+
         try:
             response = self._client.post(
                 f"{self._base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {self._api_key}"},
-                json={
-                    "model": model,
-                    "temperature": temperature,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                },
+                json=payload,
             )
         except httpx.HTTPError as exc:
             raise ProviderError(

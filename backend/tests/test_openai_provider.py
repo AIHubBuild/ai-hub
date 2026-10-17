@@ -50,6 +50,66 @@ def test_complete_sends_bearer_auth_and_payload():
     assert '"role":"system"' in captured["body"]
 
 
+def test_deepseek_thinking_can_be_explicitly_disabled():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = request.content.decode()
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": "ok"}}]}
+        )
+
+    client = provider(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.deepseek.com",
+        thinking=False,
+    )
+    client.complete(system="sys", user="usr", model="deepseek-flash", temperature=0.0)
+
+    assert '"thinking":{"type":"disabled"}' in captured["body"]
+    assert "reasoning_effort" not in captured["body"]
+
+
+def test_reasoning_effort_is_sent_only_with_thinking_enabled():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = request.content.decode()
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": "ok"}}]}
+        )
+
+    client = provider(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.deepseek.com",
+        thinking=True,
+        reasoning_effort="high",
+    )
+    client.complete(system="sys", user="usr", model="deepseek-flash", temperature=0.0)
+
+    assert '"thinking":{"type":"enabled"}' in captured["body"]
+    assert '"reasoning_effort":"high"' in captured["body"]
+
+
+def test_thinking_field_is_omitted_when_not_configured():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = request.content.decode()
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": "ok"}}]}
+        )
+
+    client = provider(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.openai.com/v1",
+    )
+    client.complete(system="sys", user="usr", model="gpt-4.1-mini", temperature=0.4)
+
+    assert "thinking" not in captured["body"]
+    assert "reasoning_effort" not in captured["body"]
+
+
 def test_non_200_raises_provider_error_with_status():
     client = provider(status_code=429, response_json={"error": {"message": "Rate limited"}})
     with pytest.raises(ProviderError, match="HTTP 429") as exc_info:

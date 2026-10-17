@@ -17,7 +17,7 @@ threadpool. All responses use the platform envelope
 - 415 unsupported file type
 - 422 unreadable/empty file
 - 502 AI provider failure during a run
-- 503 AI provider not configured (no OPENAI_API_KEY)
+- 503 AI provider not configured (no AI_API_KEY / DEEPSEEK_API_KEY)
 """
 
 from uuid import UUID
@@ -192,11 +192,14 @@ def analyze_resume(
             analysis_id=analysis.id,
             resume_id=analysis.resume_id,
             run_id=analysis.run_id,
-            ats_score=analysis.ats_score,
+            ats_score=result.ats_score,
             score_label=result.score_label,
-            matching_keywords=analysis.matching_keywords,
+            requirement_coverage=result.requirement_coverage,
+            evidence_confidence=result.evidence_confidence,
+            matching_keywords=result.matching_keywords,
             partial_keywords=result.partial_keywords,
-            missing_keywords=analysis.missing_keywords,
+            unverified_keywords=result.unverified_keywords,
+            missing_keywords=result.missing_keywords,
             requirement_analysis=result.requirement_analysis,
             score_breakdown=result.score_breakdown,
             job_description_warning=result.job_description_warning,

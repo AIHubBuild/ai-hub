@@ -51,15 +51,34 @@ def test_em_dash_overuse_is_flagged():
     assert any(issue.code == "em_dash_overuse" for issue in review.issues)
 
 
-def test_two_em_dashes_are_not_flagged():
+def test_a_single_em_dash_is_flagged():
     text = (
         "Jane Doe\n"
-        "I rebuilt the VPN gateway \u2014 the old one was failing \u2014 and "
-        "then re-tested the tunnels.\n"
+        "I rebuilt the VPN gateway \u2014 the old one was failing.\n"
     )
     review = review_writing(SOURCE, text, CLEAN_COVER)
 
-    assert all(issue.code != "em_dash_overuse" for issue in review.issues)
+    assert any(issue.code == "em_dash_overuse" for issue in review.issues)
+
+
+def test_placeholder_text_is_flagged():
+    text = "Jane Doe\n[Company] is hiring for a role that fits my background.\n"
+    review = review_writing(SOURCE, text, CLEAN_COVER)
+
+    assert any(issue.code == "placeholder_text" for issue in review.issues)
+
+
+def test_generic_cover_letter_opening_is_flagged():
+    review = review_writing(
+        SOURCE,
+        CLEAN_TAILORED,
+        "Dear Hiring Manager,\nI am writing to apply for this role.\nJane Doe\n",
+    )
+
+    assert any(
+        issue.code == "generic_phrase" and "writing to apply" in issue.message
+        for issue in review.issues
+    )
 
 
 def test_repeated_sentence_openers_are_flagged():

@@ -177,6 +177,15 @@ _SECTION_HEADINGS = {
         "certifications",
         "degree",
     ],
+    "achievements": [
+        "achievements",
+        "achievement",
+        "impact",
+        "outcomes",
+        "results",
+        "success metrics",
+        "track record",
+    ],
     "communication": [
         "communication",
         "collaboration",

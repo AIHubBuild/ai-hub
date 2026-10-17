@@ -6,17 +6,19 @@ never silently rewrites — issues in the tailored resume and cover
 letter:
 
 - generic AI-style phrases,
-- excessive em dashes,
+- any em dash,
 - repetitive sentence openings,
 - missing applicant name (consistency with the source resume),
 - cross-document inconsistencies it can detect deterministically.
 
 The review never contacts the model: flagged wording is either already
-covered by the v3 prompt rules or surfaced to the user for review.
+covered by the latest prompt rules or surfaced to the user for review.
 """
 
 import re
 from dataclasses import dataclass, field
+
+from app.ai_core.writing_style import contains_em_dash
 
 # Generic AI-style phrases (case-insensitive; examples from the writing
 # rules, not an exhaustive blacklist).
@@ -31,6 +33,12 @@ GENERIC_PHRASES = [
     "self-motivated team player",
     "goes above and beyond",
     "think outside the box",
+    "i am writing to apply",
+    "i would be a great fit",
+    "i believe i would be",
+    "hit the ground running",
+    "dynamic and results-driven",
+    "in today's fast-paced",
 ]
 
 # Transitions that become repetitive when they open many sentences.
@@ -40,8 +48,6 @@ REPEATED_TRANSITIONS = [
     "additionally",
     "in addition",
 ]
-
-EM_DASH_LIMIT = 2
 
 NAME_REGEX = re.compile(r"\b[A-Z][a-z]{2,}\b")
 
@@ -91,14 +97,34 @@ def _check_generic_phrases(doc_name: str, text: str, issues: list) -> None:
 
 
 def _check_em_dashes(doc_name: str, text: str, issues: list) -> None:
-    count = text.count("\u2014")
-    if count > EM_DASH_LIMIT:
+    if contains_em_dash(text):
         issues.append(
             WritingIssue(
                 code="em_dash_overuse",
                 message=(
-                    f"{doc_name}: {count} em dashes found; prefer commas "
-                    f"or rewritten sentences."
+                    f"{doc_name}: em dash found; use commas, full stops, "
+                    f"colons, or parentheses instead."
+                ),
+            )
+        )
+
+
+PLACEHOLDER_PATTERN = re.compile(
+    r"\[(?:name|email|phone|address|company|linkedin|github)\]|"
+    r"\b(?:TBD|TODO|Lorem ipsum)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _check_placeholders(doc_name: str, text: str, issues: list) -> None:
+    match = PLACEHOLDER_PATTERN.search(text)
+    if match:
+        issues.append(
+            WritingIssue(
+                code="placeholder_text",
+                message=(
+                    f"{doc_name}: placeholder text '{match.group(0)}' found; "
+                    f"remove it or use verified information from the source."
                 ),
             )
         )
@@ -187,6 +213,7 @@ def review_writing(
             continue
         _check_generic_phrases(doc_name, text, issues)
         _check_em_dashes(doc_name, text, issues)
+        _check_placeholders(doc_name, text, issues)
         _check_repeated_openers(doc_name, text, issues)
 
     if tailored_resume or cover_letter:

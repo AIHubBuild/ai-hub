@@ -52,10 +52,9 @@ def auth_headers(user_id: str = USER_A) -> dict[str, str]:
 def client(tmp_path):
     provider = PromptCapturingProvider(
         responses=[
-            # First message: classify + troubleshoot.
+            # First message: classification only.
             "network_issue",
-            "Restart the laptop and the router.",
-            # Contextual follow-up: troubleshoot only.
+            # Contextual follow-up: troubleshooting.
             "Since other devices work, check the laptop's Wi-Fi adapter "
             "status and IP configuration with ipconfig /all.",
             # Confirmation: root-cause summary only.
@@ -76,8 +75,8 @@ def client(tmp_path):
     Base.metadata.create_all(app.state.engine)
     run_store = SQLAlchemyRunRecordStore(app.state.session_factory)
     ai_core = create_ai_core(run_store=run_store)
-    ai_core.llm_factory.register_provider("openai", provider)
-    wire_support_copilot(ai_core)
+    ai_core.llm_factory.register_provider(settings.ai_provider_name, provider)
+    wire_support_copilot(ai_core, settings)
     app.state.ai_core = ai_core
     with TestClient(app) as test_client:
         yield test_client, provider
@@ -104,7 +103,7 @@ def test_network_issue_asks_targeted_question(client):
     data = response.json()["data"]
     assert data["issue_type"] == "network_issue"
     assert data["ticket"]["status"] == "Open"
-    assert "Wi-Fi network at all" in data["follow_up_question"]
+    assert "connect to Wi-Fi at all" in data["follow_up_question"]
     assert "web pages" in data["follow_up_question"]
 
 

@@ -36,12 +36,15 @@ class AtsAnalysisRequest(BaseModel):
 
 
 class RequirementEvidence(BaseModel):
-    """Explainable evidence for one job requirement term."""
+    """Explainable evidence for one job requirement."""
 
     term: str
-    status: str  # supported | partial | missing
-    category: str  # essential | preferred
+    status: str  # matched | partial | unverified | missing
+    category: str  # skills | experience | responsibilities | ...
     evidence: list[str]
+    section: str | None = None
+    detail: str = ""
+    mandatory: bool = True
 
 
 class WritingIssue(BaseModel):
@@ -70,9 +73,12 @@ class AtsAnalysisResult(BaseModel):
     """
 
     ats_score: int
-    score_label: str = "Estimated job-match score"
+    score_label: str = "Estimated resume-to-job match"
+    requirement_coverage: int | None = None
+    evidence_confidence: int | None = None
     matching_keywords: list[str]
     partial_keywords: list[str] = []
+    unverified_keywords: list[str] = []
     missing_keywords: list[str]
     requirement_analysis: list[RequirementEvidence] | None = None
     score_breakdown: list[dict] | None = None
@@ -167,9 +173,12 @@ class AnalysisData(BaseModel):
     resume_id: str
     run_id: str
     ats_score: int
-    score_label: str = "Estimated job-match score"
+    score_label: str = "Estimated resume-to-job match"
+    requirement_coverage: int | None = None
+    evidence_confidence: int | None = None
     matching_keywords: list[str]
     partial_keywords: list[str] = []
+    unverified_keywords: list[str] = []
     missing_keywords: list[str]
     requirement_analysis: list[RequirementEvidence] | None = None
     score_breakdown: list[dict] | None = None

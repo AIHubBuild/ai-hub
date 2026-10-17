@@ -13,6 +13,7 @@ from app.ai_core import (
     DomainNotConfiguredError,
     ProviderNotConfiguredError,
 )
+from app.core.config import Settings, get_settings
 from app.domains.support_copilot.prompts import register_prompts
 from app.domains.support_copilot.workflow import (
     ROOT_CAUSE_STEP_ID,
@@ -24,20 +25,25 @@ from app.domains.support_copilot.workflow import (
 )
 
 DOMAIN = "support_copilot"
-PROVIDER = "openai"
 
 
-def wire_support_copilot(ai_core: AICore) -> None:
-    """Register prompts, model config, and workflows."""
+def wire_support_copilot(ai_core: AICore, settings: Settings | None = None) -> None:
+    """Register prompts, model config, and workflows.
+
+    ``settings`` supplies the provider and support model; when omitted
+    the process-wide cached settings apply (keeps existing call sites
+    and tests working).
+    """
     register_prompts(ai_core.prompts)
 
+    settings = settings or get_settings()
     ai_core.llm_factory.register_config(
         DomainModelConfig(
             domain=DOMAIN,
-            provider=PROVIDER,
-            model="gpt-4o-mini",
+            provider=settings.ai_provider_name,
+            model=settings.support_model_name,
             temperature=0.0,
-            timeout_seconds=60,
+            timeout_seconds=int(settings.ai_timeout_seconds),
         )
     )
 

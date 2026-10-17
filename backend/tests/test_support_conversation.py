@@ -19,7 +19,7 @@ from app.ai_core import create_ai_core
 from app.ai_core.run_records_db import SQLAlchemyRunRecordStore
 from app.core.config import Settings
 from app.domains.support_copilot.domain import wire_support_copilot
-from app.domains.support_copilot.prompts import ROOT_CAUSE_TEMPLATE_V2
+from app.domains.support_copilot.prompts import ROOT_CAUSE_TEMPLATE_V3
 from app.main import create_app
 from app.models import Base
 from app.models.support import SupportTicket
@@ -61,8 +61,8 @@ def build_app(tmp_path, provider: CountingProvider) -> FastAPI:
     Base.metadata.create_all(app.state.engine)
     run_store = SQLAlchemyRunRecordStore(app.state.session_factory)
     ai_core = create_ai_core(run_store=run_store)
-    ai_core.llm_factory.register_provider("openai", provider)
-    wire_support_copilot(ai_core)
+    ai_core.llm_factory.register_provider(settings.ai_provider_name, provider)
+    wire_support_copilot(ai_core, settings)
     app.state.ai_core = ai_core
     return app
 
@@ -71,10 +71,9 @@ def build_app(tmp_path, provider: CountingProvider) -> FastAPI:
 def client(tmp_path):
     provider = CountingProvider(
         responses=[
-            # First message: classify + troubleshoot.
+            # First message: classification only.
             "hardware_issue",
-            "Note the stop code and check what changed recently.",
-            # Contextual follow-up: troubleshoot only.
+            # Contextual follow-up: troubleshooting.
             "Check recent Windows update history.",
             # Confirmation: root-cause summary only.
             "Issue: blue screen after Windows update\n"
@@ -131,6 +130,7 @@ def test_contextual_follow_up_does_not_repeat_classification(client):
     assert "### Issue Classification" not in data["response"]
     assert "update history" in data["response"]
     assert data["ticket"]["status"] == "In Progress"
+    assert data["ticket"]["troubleshooting_attempts"] == 1
 
 
 def test_fix_report_skips_troubleshooting_and_asks_confirmation(client):
@@ -247,10 +247,11 @@ def test_negated_fix_phrasing_still_troubleshoots(client):
 
 
 def test_root_cause_prompt_never_overstates_execution():
-    template = ROOT_CAUSE_TEMPLATE_V2.user_template
+    template = ROOT_CAUSE_TEMPLATE_V3.user_template
 
     assert "Suspected Cause" in template
     assert "Actions Confirmed by the User" in template
     assert "Unresolved Uncertainties" in template
     assert "unless the user said so" in template
     assert "Never claim a root cause is confirmed" in template
+    assert "SHARED WRITING STYLE" in template

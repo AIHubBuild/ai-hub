@@ -16,7 +16,7 @@ export function CapabilityTags({
       {capabilities.map((capability) => (
         <li
           key={capability}
-          className="rounded-md bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+          className="rounded-md border border-line bg-transparent px-2.5 py-1 text-xs text-ink-soft"
         >
           {capability}
         </li>

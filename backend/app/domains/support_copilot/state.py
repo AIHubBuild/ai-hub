@@ -15,6 +15,7 @@ class ITSupportState(TypedDict, total=False):
     issue_type: str
     knowledge_base: str
     follow_up_question: str
+    diagnostic_context: str
     troubleshooting_steps: List[str]
     resolution: str
     root_cause_summary: str
@@ -29,6 +30,7 @@ def empty_state() -> ITSupportState:
         issue_type="",
         knowledge_base="",
         follow_up_question="",
+        diagnostic_context="",
         troubleshooting_steps=[],
         resolution="",
         root_cause_summary="",

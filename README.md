@@ -13,8 +13,9 @@ pluggable modules on one shared foundation.
 > implemented end-to-end, and the first two assistants are integrated:
 > - **ATS Resume Assistant** — resume upload (PDF/DOCX/TXT, 5 MB limit),
 >   ATS analysis via the deterministic keyword engine plus an AI provider
->   (OpenAI-compatible, configured with `OPENAI_API_KEY`), run-record
->   persistence, and tailored-resume DOCX download.
+>   (OpenAI-compatible, DeepSeek `deepseek-flash` by default, configured
+>   with `AI_API_KEY` / `DEEPSEEK_API_KEY`), run-record persistence, and
+>   tailored-resume DOCX download.
 > - **AI IT Support Copilot** — issue classification, knowledge-base
 >   troubleshooting, ticket lifecycle, escalation, and root-cause
 >   summaries, with persisted sessions and tickets.

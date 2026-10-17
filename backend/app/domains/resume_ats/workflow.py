@@ -27,6 +27,7 @@ from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
 from app.ai_core.prompts import PromptRegistry
+from app.ai_core.writing_style import normalize_writing
 from app.domains.resume_ats.job_description import (
     describe_warning,
     strip_boilerplate,
@@ -62,10 +63,13 @@ class AtsWorkflowState(TypedDict, total=False):
     job_description_warning: str | None
     match_score: int
     score_label: str
+    requirement_coverage: int
+    evidence_confidence: int
     matching_keywords: list[str]
     partial_keywords: list[str]
+    unverified_keywords: list[str]
     missing_keywords: list[str]
-    requirement_evidence: dict[str, dict]
+    requirement_evidence: list[dict]
     score_breakdown: list[dict]
     # AI node outputs.
     improvement_suggestions: str
@@ -100,10 +104,13 @@ def _deterministic_analysis_node(state: AtsWorkflowState) -> dict:
         ),
         "match_score": analysis.estimated_score,
         "score_label": analysis.score_label,
+        "requirement_coverage": analysis.requirement_coverage,
+        "evidence_confidence": analysis.evidence_confidence,
         "matching_keywords": analysis.supported_terms,
         "partial_keywords": analysis.partial_terms,
+        "unverified_keywords": analysis.unverified_terms,
         "missing_keywords": analysis.missing_terms,
-        "requirement_evidence": analysis.evidence_map,
+        "requirement_evidence": analysis.requirement_evidence,
         "score_breakdown": [
             {
                 "category": entry.category,
@@ -111,6 +118,7 @@ def _deterministic_analysis_node(state: AtsWorkflowState) -> dict:
                 "total": entry.total,
                 "supported": entry.supported,
                 "partial": entry.partial,
+                "unverified": entry.unverified,
                 "missing": entry.missing,
                 "score": entry.score,
             }
@@ -161,7 +169,7 @@ def _make_llm_node(
             improvement_suggestions=state.get("improvement_suggestions") or "",
             tailored_resume=state.get("tailored_resume") or "",
         )
-        response = client.complete(system=template.system, user=user)
+        response = normalize_writing(client.complete(system=template.system, user=user))
         return {
             output_field: response,
             "prompt_versions": _merged_prompt_versions(
@@ -174,12 +182,20 @@ def _make_llm_node(
 
 def _format_evidence(state: AtsWorkflowState) -> str:
     """Compact requirement-evidence text for AI prompt rendering."""
-    evidence = state.get("requirement_evidence") or {}
+    evidence = state.get("requirement_evidence") or []
     lines = []
-    for term, entry in evidence.items():
+    if isinstance(evidence, dict):
+        entries = [
+            (term, entry) for term, entry in evidence.items()
+        ]
+    else:
+        entries = [
+            (entry.get("term", "requirement"), entry) for entry in evidence
+        ]
+    for term, entry in entries:
         snippets = "; ".join(entry.get("evidence") or ["no evidence"])
         lines.append(
-            f"- {term} ({entry.get('category', 'essential')}, "
+            f"- {term} ({entry.get('category', 'skills')}, "
             f"{entry.get('status', 'missing')}): {snippets}"
         )
     return "\n".join(lines)
@@ -226,21 +242,35 @@ def build_ats_workflow(client: ChatClient, prompts: PromptRegistry):
 
 def result_from_state(state: AtsWorkflowState) -> AtsAnalysisResult:
     """Map the final workflow state onto the analysis contract."""
-    evidence = state.get("requirement_evidence") or {}
+    evidence = state.get("requirement_evidence") or []
+    if isinstance(evidence, dict):
+        entries = [
+            (term, entry) for term, entry in evidence.items()
+        ]
+    else:
+        entries = [
+            (entry.get("term", "requirement"), entry) for entry in evidence
+        ]
     requirement_analysis = [
         RequirementEvidence(
             term=term,
             status=entry.get("status", "missing"),
-            category=entry.get("category", "essential"),
+            category=entry.get("category", "skills"),
             evidence=entry.get("evidence") or [],
+            section=entry.get("section"),
+            detail=entry.get("detail", ""),
+            mandatory=entry.get("mandatory", True),
         )
-        for term, entry in evidence.items()
+        for term, entry in entries
     ] or None
     return AtsAnalysisResult(
         ats_score=state.get("match_score", 0),
-        score_label=state.get("score_label") or "Estimated job-match score",
+        score_label=state.get("score_label") or "Estimated resume-to-job match",
+        requirement_coverage=state.get("requirement_coverage"),
+        evidence_confidence=state.get("evidence_confidence"),
         matching_keywords=state.get("matching_keywords", []),
         partial_keywords=state.get("partial_keywords", []),
+        unverified_keywords=state.get("unverified_keywords", []),
         missing_keywords=state.get("missing_keywords", []),
         requirement_analysis=requirement_analysis,
         score_breakdown=state.get("score_breakdown"),

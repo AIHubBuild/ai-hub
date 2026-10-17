@@ -14,14 +14,16 @@ export default async function AssistantDetailPage(
   const { assistantId } = await props.params;
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-12 sm:py-16">
-      <Link
-        href="/#assistants"
-        className="mb-8 inline-flex items-center text-sm text-zinc-500 transition-colors hover:text-zinc-900 focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-zinc-500 dark:text-zinc-400 dark:hover:text-zinc-50"
-      >
-        <ArrowLeftIcon />
-        All assistants
-      </Link>
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
+      <nav aria-label="Breadcrumb" className="mb-7">
+        <Link
+          href="/"
+          className="inline-flex items-center text-sm font-medium text-muted transition-colors hover:text-ink focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+        >
+          <ArrowLeftIcon />
+          Workspace
+        </Link>
+      </nav>
 
       <Suspense fallback={<AssistantDetailSkeleton />}>
         <AssistantDetailContent assistantId={assistantId} />
@@ -42,7 +44,7 @@ async function AssistantDetailContent({
     return (
       <ErrorPanel
         title="Could not load this assistant"
-        message="The backend API is unreachable. Start the FastAPI server on port 8000, then reload the page."
+        message="This assistant is temporarily unavailable. Please try again in a moment."
       />
     );
   }
@@ -52,52 +54,56 @@ async function AssistantDetailContent({
   }
 
   return (
-    <article className="max-w-2xl">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          {assistant.name}
-        </h1>
-        <StatusBadge status={assistant.status} />
-      </div>
-
-      <p className="text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
-        {assistant.description}
-      </p>
+    <article className="max-w-3xl">
+      <header className="border-b border-line pb-8">
+        <p className="ui-eyebrow">Tool details</p>
+        <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+          <h1 className="ui-display text-4xl text-ink sm:text-5xl">
+            {assistant.name}
+          </h1>
+          <StatusBadge status={assistant.status} />
+        </div>
+        <p className="mt-4 text-sm leading-6 text-muted sm:text-base">
+          {assistant.description}
+        </p>
+      </header>
 
       <section aria-labelledby="capabilities-heading" className="mt-8">
         <h2
           id="capabilities-heading"
-          className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400"
+          className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted"
         >
           Capabilities
         </h2>
-        <CapabilityTags
-          capabilities={assistant.capabilities}
-          label={`${assistant.name} capabilities`}
-        />
+        <div className="mt-3">
+          <CapabilityTags
+            capabilities={assistant.capabilities}
+            label={`${assistant.name} capabilities`}
+          />
+        </div>
       </section>
 
       <section
         aria-labelledby="launch-heading"
-        className="mt-8 rounded-xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-800 dark:bg-zinc-900"
+        className="mt-8 rounded-2xl bg-surface-muted/60 p-6"
       >
         <h2
           id="launch-heading"
-          className="text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400"
+          className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted"
         >
           Launch
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+        <p className="mt-2 text-sm leading-6 text-ink-soft">
           {assistant.app_path !== null
-            ? "This assistant is integrated with AI Hub."
+            ? "This assistant is integrated with AI Hub and runs inside your private workspace."
             : assistant.launch_url !== null
               ? "This assistant has a hosted deployment."
-              : "This assistant is not yet integrated with AI Hub. The launch flow arrives in a later phase — you can review its source in the repository below."}
+              : "This assistant is not yet integrated with AI Hub. The launch flow arrives in a later phase. You can review its source in the repository below."}
         </p>
         {assistant.app_path !== null && (
           <Link
             href={assistant.app_path}
-            className="mt-4 inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:focus-visible:outline-zinc-50"
+            className="ui-button ui-button-primary mt-4"
           >
             Open in AI Hub
           </Link>
@@ -108,7 +114,7 @@ async function AssistantDetailContent({
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Launch ${assistant.name} (opens in a new tab)`}
-            className="mt-4 inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:focus-visible:outline-zinc-50"
+            className="ui-button ui-button-primary mt-4"
           >
             Launch
             <ExternalLinkIcon />
@@ -119,7 +125,7 @@ async function AssistantDetailContent({
       <section aria-labelledby="reference-heading" className="mt-8">
         <h2
           id="reference-heading"
-          className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400"
+          className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted"
         >
           Reference
         </h2>
@@ -128,7 +134,7 @@ async function AssistantDetailContent({
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`${assistant.name} repository (opens in a new tab)`}
-          className="inline-flex items-center gap-1 text-sm text-zinc-600 underline-offset-2 hover:text-zinc-900 hover:underline focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 dark:text-zinc-400 dark:hover:text-zinc-50"
+          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-ink-soft underline-offset-4 transition-colors hover:text-ink hover:underline focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           View repository
           <ExternalLinkIcon />

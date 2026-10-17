@@ -1,18 +1,23 @@
 import { Suspense } from "react";
+import { HubMarkIcon } from "../components/icons";
 import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
   return (
-    <main className="mx-auto w-full max-w-md flex-1 px-6 py-16">
-      <section aria-labelledby="login-heading" className="mb-8 text-center">
+    <main className="mx-auto w-full max-w-md flex-1 px-4 py-12 sm:px-6 sm:py-16">
+      <section aria-labelledby="login-heading" className="mb-7 text-center">
+        <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-ink text-canvas">
+          <HubMarkIcon className="h-5 w-5" />
+        </span>
         <h1
           id="login-heading"
-          className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
+          className="ui-display mt-5 text-3xl text-ink"
         >
           Sign in to AI Hub
         </h1>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-          Your resume analyses and documents are private to your account.
+        <p className="mt-2 text-sm leading-6 text-muted">
+          Your analyses, conversations, and tickets stay private to your
+          account.
         </p>
       </section>
       <Suspense fallback={null}>

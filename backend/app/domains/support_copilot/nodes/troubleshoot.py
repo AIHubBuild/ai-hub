@@ -10,6 +10,7 @@ preserved: the result is stored in both `troubleshooting_steps` and
 from typing import Any, Callable, Protocol
 
 from app.ai_core.prompts import PromptRegistry
+from app.ai_core.writing_style import normalize_writing
 
 
 class ChatClient(Protocol):
@@ -25,11 +26,12 @@ def make_troubleshoot_node(
         user = template.user_template.format(
             knowledge_base=state.get("knowledge_base", ""),
             conversation_history=state.get("conversation_history", ""),
+            diagnostic_context=state.get("diagnostic_context", ""),
             issue_type=state.get("issue_type", ""),
             user_issue=state.get("user_issue", ""),
         )
         response = client.complete(system=template.system, user=user)
-        ai_response = str(response).strip()
+        ai_response = normalize_writing(str(response))
         return {
             "troubleshooting_steps": [ai_response],
             "resolution": ai_response,

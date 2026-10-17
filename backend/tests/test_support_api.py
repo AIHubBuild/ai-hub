@@ -70,8 +70,8 @@ def build_app(tmp_path, settings: Settings, provider: FakeProvider | None) -> Fa
     run_store = SQLAlchemyRunRecordStore(app.state.session_factory)
     ai_core = create_ai_core(run_store=run_store)
     if provider is not None:
-        ai_core.llm_factory.register_provider("openai", provider)
-    wire_support_copilot(ai_core)
+        ai_core.llm_factory.register_provider(settings.ai_provider_name, provider)
+    wire_support_copilot(ai_core, settings)
     app.state.ai_core = ai_core
     return app
 
@@ -80,11 +80,10 @@ def build_app(tmp_path, settings: Settings, provider: FakeProvider | None) -> Fa
 def client(tmp_path):
     provider = FakeProvider(
         responses=[
-            # First message: classify + troubleshoot.
+            # First message: classification only.
             "vpn_issue",
+            # Follow-up message: troubleshooting.
             "Restart your VPN client and try again.",
-            # Follow-up message: troubleshoot only.
-            "Check the VPN gateway status.",
             # Confirmation message: root-cause summary only (the
             # "fixed" report turn makes no AI call).
             "Issue Type: vpn_issue\nLikely Cause: configuration drift",
@@ -162,7 +161,8 @@ def test_first_message_classifies_and_creates_ticket(client):
     assert response.status_code == 201
     data = response.json()["data"]
     assert data["issue_type"] == "vpn_issue"
-    assert data["follow_up_question"] == "Are you receiving any VPN error messages?"
+    assert "error code" in data["follow_up_question"]
+    assert "timeout" in data["follow_up_question"]
     assert data["escalation_needed"] is False
     ticket = data["ticket"]
     assert ticket["priority"] == "Medium"
@@ -170,6 +170,9 @@ def test_first_message_classifies_and_creates_ticket(client):
     assert ticket["status"] == "Open"
     assert "### Issue Classification" in data["response"]
     assert "vpn_issue" in data["response"]
+    # The first turn diagnoses and asks a focused question before
+    # prescribing a fix.
+    assert "### Troubleshooting Response" not in data["response"]
     assert ticket["ticket_id"].startswith("INC-")
 
 
@@ -297,7 +300,11 @@ def test_security_issue_escalates_on_first_message(tmp_path):
     assert data["escalation_needed"] is True
     assert data["ticket"]["priority"] == "High"
     assert data["ticket"]["assigned_team"] == "Security Operations"
-    assert "Escalated to IT Support Team" in data["response"]
+    assert data["ticket"]["status"] == "Escalation Requested"
+    assert data["ticket"]["handoff_status"] == "requested"
+    assert "Escalation requested for Security Operations" in data["response"]
+    assert "No human engineer has accepted" in data["response"]
+    assert "Escalated to IT Support Team" not in data["response"]
 
 
 def test_blue_screen_follow_up_is_context_aware(tmp_path):
@@ -305,10 +312,9 @@ def test_blue_screen_follow_up_is_context_aware(tmp_path):
     keep the same ticket, and must not escalate on CRITICAL_PROCESS_DIED."""
     provider = FakeProvider(
         responses=[
-            # First message: classify + troubleshoot.
+            # First message: classification only.
             "hardware_issue",
-            "Note the stop code and check what changed recently.",
-            # Follow-up: troubleshoot only.
+            # Follow-up: troubleshooting.
             "1. Check recent Windows update history. 2. Can you reach "
             "Windows Recovery Environment, and are your files backed up?",
         ]
@@ -325,6 +331,8 @@ def test_blue_screen_follow_up_is_context_aware(tmp_path):
         assert first_data["issue_type"] == "hardware_issue"
         assert first_data["ticket"]["assigned_team"] == "Hardware Support"
         assert first_data["ticket"]["status"] == "Open"
+        assert "stop code" in first_data["follow_up_question"]
+        assert "### Troubleshooting Response" not in first_data["response"]
         first_ticket_id = first_data["ticket"]["ticket_id"]
 
         follow_up = send_message(
@@ -346,19 +354,13 @@ def test_blue_screen_follow_up_is_context_aware(tmp_path):
     assert "update history" in data["response"]
     assert "Windows Recovery Environment" in data["response"]
     # Escalation messaging is consistent with the actual ticket state.
-    assert "No escalation required" in data["response"]
+    assert "No escalation requested" in data["response"]
     assert "Escalated to IT Support Team" not in data["response"]
 
 
-def test_escalation_keyword_marks_ticket_escalated_consistently(tmp_path):
-    """A real escalation phrase must produce one consistent state."""
-    provider = FakeProvider(
-        responses=[
-            "vpn_issue",
-            "Restart your VPN client.",
-            "Check the VPN gateway status.",
-        ]
-    )
+def test_business_impact_requests_escalation_without_claiming_handoff(tmp_path):
+    """Business impact requests escalation, but no human has accepted it."""
+    provider = FakeProvider(responses=["vpn_issue"])
     app = build_app(tmp_path, make_settings(tmp_path), provider)
     with TestClient(app) as test_client:
         session_id = create_session(test_client).json()["data"]["session_id"]
@@ -372,10 +374,13 @@ def test_escalation_keyword_marks_ticket_escalated_consistently(tmp_path):
 
     assert response.status_code == 201
     data = response.json()["data"]
-    assert data["ticket"]["status"] == "Escalated"
-    assert "Escalated to IT Support Team" in data["response"]
-    assert "No escalation required" not in data["response"]
-    assert "has been escalated to" in data["response"]
+    assert data["ticket"]["status"] == "Escalation Requested"
+    assert data["ticket"]["handoff_status"] == "requested"
+    assert data["ticket"]["escalation_reason"] == "Significant business impact reported."
+    assert "Escalation requested for Remote Access Team" in data["response"]
+    assert "No human engineer has accepted" in data["response"]
+    assert "Escalated to IT Support Team" not in data["response"]
+    assert "has been escalated to" not in data["response"]
 
 
 def test_follow_up_response_omits_classification_and_ticket_is_preserved(client):
@@ -455,7 +460,9 @@ def test_message_without_provider_returns_503(tmp_path):
         response = send_message(test_client, session_id, "VPN broken")
 
     assert response.status_code == 503
-    assert "OPENAI_API_KEY" in response.json()["message"]
+    message = response.json()["message"]
+    assert "AI_API_KEY" in message
+    assert "DEEPSEEK_API_KEY" in message
 
 
 def test_provider_failure_returns_502_and_persists_nothing(tmp_path):

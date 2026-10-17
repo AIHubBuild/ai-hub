@@ -34,6 +34,12 @@ class TicketData(BaseModel):
     priority: str
     assigned_team: str
     status: str
+    reported_issue: str | None = None
+    latest_user_update: str | None = None
+    troubleshooting_attempts: int = 0
+    current_hypothesis: str = "Not confirmed"
+    handoff_status: str = "not_requested"
+    escalation_reason: str | None = None
 
 
 class MessageData(BaseModel):

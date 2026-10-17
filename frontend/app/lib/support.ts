@@ -6,6 +6,12 @@ export interface TicketData {
   priority: string;
   assigned_team: string;
   status: string;
+  reported_issue?: string | null;
+  latest_user_update?: string | null;
+  troubleshooting_attempts?: number;
+  current_hypothesis?: string;
+  handoff_status?: string;
+  escalation_reason?: string | null;
 }
 
 export interface SupportMessage {

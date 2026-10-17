@@ -1,30 +1,183 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas: #f4f2ec;
+  --surface: #fffefa;
+  --surface-muted: #eae7df;
+  --ink: #15171c;
+  --ink-soft: #3d424b;
+  --muted: #5f646d;
+  --line: #ddd9cf;
+  --accent: #2f4bff;
+  --accent-strong: #2039d6;
+  --accent-soft: #edf0ff;
+  --success: #1c7c54;
+  --danger: #b42318;
+  --display-font: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+    "Times New Roman", serif;
+  --background: var(--canvas);
+  --foreground: var(--ink);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--display-font);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --canvas: #111214;
+    --surface: #191b1f;
+    --surface-muted: #202227;
+    --ink: #f4f2ec;
+    --ink-soft: #d5d2c9;
+    --muted: #a09c92;
+    --line: #2c2f35;
+    --accent: #6d83ff;
+    --accent-strong: #8b9cff;
+    --accent-soft: #1b2350;
+    --success: #4ecb8a;
+    --danger: #ff8b7e;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }
 
 html {
   scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Arial, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: rgb(47 75 255 / 0.22);
+}
+
+@layer components {
+  .ui-display {
+    font-family: var(--display-font);
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    line-height: 0.98;
+  }
+
+  .ui-eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    line-height: 1.2;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .ui-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    padding: 0.72rem 1.1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1;
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease,
+      transform 160ms ease;
+  }
+
+  .ui-button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .ui-button-primary {
+    background-color: var(--accent);
+    color: #ffffff;
+    box-shadow: 0 1px 2px rgb(21 23 28 / 0.08);
+  }
+
+  .ui-button-primary:hover {
+    background-color: var(--accent-strong);
+  }
+
+  .ui-button-primary:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .ui-button-secondary {
+    border: 1px solid var(--line);
+    background-color: transparent;
+    color: var(--ink);
+  }
+
+  .ui-button-secondary:hover {
+    border-color: var(--ink-soft);
+    background-color: var(--surface);
+  }
+
+  .ui-button-quiet {
+    color: var(--ink-soft);
+    padding-inline: 0.35rem;
+  }
+
+  .ui-button-quiet:hover {
+    color: var(--ink);
+  }
+
+  .ui-field {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    background-color: var(--surface);
+    padding: 0.72rem 0.9rem;
+    color: var(--ink);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .ui-field::placeholder {
+    color: var(--muted);
+  }
+
+  .ui-field:focus {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 3px rgb(47 75 255 / 0.14);
+  }
+
+  .ui-surface {
+    border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+    border-radius: 1.5rem;
+    background-color: var(--surface);
+  }
+
+  .ui-rule {
+    border-color: var(--line);
+  }
 }

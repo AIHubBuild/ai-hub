@@ -34,11 +34,16 @@ class ProviderNotConfiguredError(RuntimeError):
 
 
 class DomainModelConfig(BaseModel):
-    """Per-domain model defaults (§3.3: per-domain model/temperature config)."""
+    """Per-domain model configuration (§3.3).
+
+    Provider and model are supplied by the application's settings; the
+    generic ai_core layer intentionally has no provider-specific model
+    default.
+    """
 
     domain: str
     provider: str = "openai"
-    model: str = "gpt-4.1-mini"
+    model: str = ""
     temperature: float = 0.4
     max_retries: int = 2
     timeout_seconds: int = 60

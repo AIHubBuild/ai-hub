@@ -6,12 +6,12 @@ structure are preserved exactly:
 
     classify_issue ──(security_issue)──▶ escalate ──▶ END
             │
-            └──────▶ retrieve_knowledge ──▶ ask_questions ──▶ troubleshoot ──▶ END
+            └──────▶ retrieve_knowledge ──▶ ask_questions ──▶ END
 
-Because AI Hub's session service also calls the troubleshoot and
-root-cause steps directly for follow-up turns (mirroring the legacy
-Streamlit orchestration), each step is additionally exposed as a
-standalone state→state workflow so every LLM invocation goes through
+The first turn diagnoses before prescribing: it classifies the issue,
+retrieves knowledge, and asks one focused question. The service calls
+the standalone troubleshoot step on later turns, using the user's answer
+to choose the next action. Every LLM invocation still goes through
 ai_core's runner and is captured as a run record.
 """
 
@@ -28,16 +28,32 @@ from app.domains.support_copilot.nodes import (
     make_troubleshoot_node,
     retrieve_knowledge,
 )
+from app.domains.support_copilot.prompts import NOT_AN_IT_ISSUE
 from app.domains.support_copilot.state import ITSupportState
 
 SUPPORT_WORKFLOW_ID = "support_copilot/support_workflow"
 TROUBLESHOOT_STEP_ID = "support_copilot/troubleshoot_step"
 ROOT_CAUSE_STEP_ID = "support_copilot/root_cause_step"
 
+NOT_IT_CLARIFICATION_TEXT = (
+    "That doesn't sound like an IT issue. I'm the IT Support Copilot. "
+    "I can help with things like VPN problems, password resets, network "
+    "connectivity, or device trouble. Is there an IT issue I can help "
+    "you with?"
+)
+
 
 class ChatClient(Protocol):
     def complete(self, *, system: str, user: str) -> str:
         ...
+
+
+def clarify_non_it(state: ITSupportState) -> dict:
+    """Deterministic clarification for messages that are not IT issues."""
+    return {
+        "resolution": NOT_IT_CLARIFICATION_TEXT,
+        "follow_up_question": "",
+    }
 
 
 def build_support_workflow(client: ChatClient, prompts: PromptRegistry):
@@ -47,25 +63,31 @@ def build_support_workflow(client: ChatClient, prompts: PromptRegistry):
     graph.add_node("classify_issue", make_classify_issue_node(client, prompts))
     graph.add_node("retrieve_knowledge", retrieve_knowledge)
     graph.add_node("ask_questions", ask_questions)
-    graph.add_node("troubleshoot", make_troubleshoot_node(client, prompts))
     graph.add_node("escalate", escalate)
+    graph.add_node("clarify", clarify_non_it)
 
     graph.set_entry_point("classify_issue")
 
     def route_issue(state: ITSupportState) -> str:
         if state.get("issue_type") == "security_issue":
             return "escalate"
+        if state.get("issue_type") == NOT_AN_IT_ISSUE:
+            return "clarify"
         return "retrieve_knowledge"
 
     graph.add_conditional_edges(
         "classify_issue",
         route_issue,
-        {"retrieve_knowledge": "retrieve_knowledge", "escalate": "escalate"},
+        {
+            "retrieve_knowledge": "retrieve_knowledge",
+            "escalate": "escalate",
+            "clarify": "clarify",
+        },
     )
     graph.add_edge("retrieve_knowledge", "ask_questions")
-    graph.add_edge("ask_questions", "troubleshoot")
-    graph.add_edge("troubleshoot", END)
+    graph.add_edge("ask_questions", END)
     graph.add_edge("escalate", END)
+    graph.add_edge("clarify", END)
 
     return graph.compile()
 
