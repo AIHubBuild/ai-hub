@@ -13,8 +13,8 @@ pluggable modules on one shared foundation.
 > implemented end-to-end, and the first two assistants are integrated:
 > - **ATS Resume Assistant** — resume upload (PDF/DOCX/TXT, 5 MB limit),
 >   ATS analysis via the deterministic keyword engine plus an AI provider
->   (OpenAI-compatible, DeepSeek `deepseek-flash` by default, configured
->   with `AI_API_KEY` / `DEEPSEEK_API_KEY`), run-record persistence, and
+>   (OpenAI-compatible; provider, base URL, and model must be configured
+>   explicitly — see `.env.example`), run-record persistence, and
 >   tailored-resume DOCX download.
 > - **AI IT Support Copilot** — issue classification, knowledge-base
 >   troubleshooting, ticket lifecycle, escalation, and root-cause
@@ -101,6 +101,12 @@ cp .env.example frontend/.env.local   # Next.js reads env from here
 No real secrets are required for the foundation. Real keys (Supabase,
 OpenAI, etc.) will be configured in later phases and must never be
 committed.
+
+AI provider configuration is explicit. Local development must set
+`AI_PROVIDER`, `AI_BASE_URL`, and `AI_MODEL` (see `.env.example`) and
+leave `AI_DEPLOYMENT=false`. Staging and production must set
+`AI_DEPLOYMENT=true` and use OpenAI; startup fails if deployment mode is
+missing or false outside explicit local/test environments.
 
 ### Backend (FastAPI)
 

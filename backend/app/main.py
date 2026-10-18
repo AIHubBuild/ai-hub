@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5,17 +7,26 @@ from app.ai_core import create_ai_core
 from app.ai_core.providers.openai import OpenAIProvider
 from app.ai_core.run_records_db import SQLAlchemyRunRecordStore
 from app.api.errors import register_error_handlers
+from app.api.middleware import RequestContextMiddleware
 from app.api.router import api_router
-from app.core.config import Settings, get_settings
+from app.api.routes import health
+from app.core.config import (
+    Settings,
+    get_settings,
+    validate_production_ai_config,
+)
 from app.core.logging import configure_logging
 from app.db.session import create_engine_from_settings, create_session_factory
 from app.domains.resume_ats.domain import wire_resume_ats
 from app.domains.support_copilot.domain import wire_support_copilot
 
+logger = logging.getLogger(__name__)
+
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings)
+    validate_production_ai_config(settings)
 
     app = FastAPI(
         title=settings.app_name,
@@ -63,19 +74,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Outermost user middleware: assigns the request id and logs request
+    # metadata for every response, including CORS preflight responses.
+    app.add_middleware(RequestContextMiddleware)
 
     # Versioned API namespace (see docs/07_API_Design.md).
     app.include_router(api_router, prefix=settings.api_v1_prefix)
 
-    # Operational health check, unversioned.
-    @app.get("/health", tags=["system"])
-    async def health() -> dict:
-        return {
-            "status": "ok",
-            "service": settings.app_name,
-            "version": settings.app_version,
-            "environment": settings.environment,
-        }
+    # Operational health checks, unversioned for uptime monitors and
+    # load balancers. The same router is mounted under /api/v1 above.
+    app.include_router(health.router, tags=["system"])
+
+    logger.info(
+        "application_startup service=%s version=%s environment=%s",
+        settings.app_name,
+        settings.app_version,
+        settings.environment,
+    )
 
     return app
 

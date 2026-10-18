@@ -5,6 +5,8 @@ Shaped against the resume_ats domain per the approved Phase 0 decision
 documented prompt id/version, executed headlessly with run records.
 """
 
+import logging
+
 import pytest
 
 from app.ai_core import (
@@ -105,6 +107,29 @@ def test_failing_workflow_records_error_and_reraises():
     assert records[0].status is RunStatus.ERROR
     assert "ValueError" in records[0].error
     assert records[0].output_state is None
+
+
+def test_failing_workflow_logs_safe_metadata_only(caplog):
+    runner, _ = make_runner()
+
+    def failing(state: dict) -> dict:
+        raise ValueError("api_key=super-secret-value")
+
+    runner.register(WORKFLOW_ID, failing)
+
+    with caplog.at_level(logging.ERROR, logger="app.ai_core.workflows"):
+        with pytest.raises(ValueError):
+            runner.run(WORKFLOW_ID, {}, user_id=USER_ID, domain=DOMAIN)
+
+    text = caplog.text
+    assert "ai_workflow_failed" in text
+    assert f"workflow_id={WORKFLOW_ID}" in text
+    assert f"domain={DOMAIN}" in text
+    assert "run_id=" in text
+    assert "error_type=ValueError" in text
+    assert "latency_ms=" in text
+    assert "super-secret-value" not in text
+    assert "api_key=" not in text
 
 
 def test_run_record_model_is_none_for_unconfigured_domain():

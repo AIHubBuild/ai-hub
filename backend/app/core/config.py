@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import Request
 from pydantic import AliasChoices, Field
@@ -14,6 +15,22 @@ _BACKEND_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_AI_PROVIDER = "deepseek"
 DEFAULT_AI_BASE_URL = "https://api.deepseek.com"
 DEFAULT_AI_MODEL = "deepseek-flash"
+
+# DeepSeek is only allowed when local/test configuration explicitly
+# selects it. Staging and production always require explicit OpenAI.
+NON_PRODUCTION_ENVIRONMENTS = frozenset(
+    {"development", "dev", "test", "testing"}
+)
+OPENAI_PROVIDER_NAME = "openai"
+OPENAI_BASE_URL_HOST = "api.openai.com"
+
+
+class ProductionProviderConfigError(RuntimeError):
+    """Production AI configuration does not resolve to OpenAI.
+
+    The message is deliberately fixed: validation must never echo
+    environment values, model names, URLs, or API keys into logs.
+    """
 
 
 class Settings(BaseSettings):
@@ -125,6 +142,12 @@ class Settings(BaseSettings):
             "AI_REASONING_EFFORT", "ai_reasoning_effort"
         ),
     )
+    # Deployment safeguard: when enabled, OpenAI is mandatory regardless
+    # of ENVIRONMENT. Local development leaves this disabled.
+    ai_deployment: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AI_DEPLOYMENT", "ai_deployment"),
+    )
 
     # Optional per-assistant model overrides. Both fall back to AI_MODEL,
     # so changing the provider model is a single environment change.
@@ -192,6 +215,102 @@ class Settings(BaseSettings):
     @property
     def openai_timeout_seconds(self) -> float:
         return self.ai_timeout_seconds
+
+
+def _openai_config_is_valid(settings: Settings) -> bool:
+    try:
+        base_url = urlparse(settings.ai_base_url.strip())
+        base_url_port = base_url.port
+    except ValueError:
+        return False
+
+    return (
+        settings.ai_provider_name.strip().lower() == OPENAI_PROVIDER_NAME
+        and base_url.scheme == "https"
+        and base_url.hostname == OPENAI_BASE_URL_HOST
+        and base_url_port in (None, 443)
+        and not base_url.username
+        and not base_url.password
+        and all(
+            model.strip() and "deepseek" not in model.strip().lower()
+            for model in (
+                settings.ai_model,
+                settings.resume_model,
+                settings.support_model_name,
+            )
+        )
+    )
+
+
+def validate_production_ai_config(settings: Settings) -> None:
+    """Fail fast unless provider configuration is explicit and safe.
+
+    Outside an explicit local/test environment, AI_DEPLOYMENT=true is
+    required. Deployment mode always requires OpenAI regardless of
+    ENVIRONMENT. An API key also requires AI_PROVIDER, AI_BASE_URL, and
+    AI_MODEL to be explicitly configured. There is no implicit DeepSeek
+    fallback. Explicit DeepSeek is allowed only in explicit local/test
+    environments when AI_DEPLOYMENT is disabled.
+
+    The error messages are fixed and never include configuration values.
+    """
+    environment = settings.environment.strip().lower()
+    environment_is_explicit = "environment" in settings.model_fields_set
+    local_environment = (
+        environment_is_explicit and environment in NON_PRODUCTION_ENVIRONMENTS
+    )
+
+    if not local_environment and not settings.ai_deployment:
+        raise ProductionProviderConfigError(
+            "AI_DEPLOYMENT=true is required outside explicit local/test "
+            "environments."
+        )
+
+    if not settings.ai_api_key:
+        return
+
+    required_fields = {"ai_provider", "ai_base_url", "ai_model"}
+    missing = required_fields - settings.model_fields_set
+    values_are_present = all(
+        (
+            settings.ai_provider.strip(),
+            settings.ai_base_url.strip(),
+            settings.ai_model.strip(),
+        )
+    )
+    if missing or not values_are_present:
+        raise ProductionProviderConfigError(
+            "AI provider configuration is incomplete. Set AI_PROVIDER, "
+            "AI_BASE_URL, and AI_MODEL explicitly. Local environments may "
+            "use explicit DeepSeek or OpenAI configuration; staging and "
+            "production must use OpenAI."
+        )
+
+    if settings.ai_deployment:
+        if not _openai_config_is_valid(settings):
+            raise ProductionProviderConfigError(
+                "AI_DEPLOYMENT=true requires explicit OpenAI configuration. "
+                "Check AI_PROVIDER, AI_BASE_URL, AI_MODEL, "
+                "RESUME_ATS_MODEL, and SUPPORT_MODEL."
+            )
+        return
+
+    if local_environment:
+        if (
+            settings.ai_provider_name.strip().lower() == OPENAI_PROVIDER_NAME
+            and not _openai_config_is_valid(settings)
+        ):
+            raise ProductionProviderConfigError(
+                "OpenAI configuration is invalid. Check AI_BASE_URL, "
+                "AI_MODEL, RESUME_ATS_MODEL, and SUPPORT_MODEL."
+            )
+        return
+
+    if not _openai_config_is_valid(settings):
+        raise ProductionProviderConfigError(
+            "Staging and production must use OpenAI. Check AI_PROVIDER, "
+            "AI_BASE_URL, AI_MODEL, RESUME_ATS_MODEL, and SUPPORT_MODEL."
+        )
 
 
 @lru_cache

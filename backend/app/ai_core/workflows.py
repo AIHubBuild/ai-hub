@@ -8,6 +8,7 @@ a PostgreSQL checkpointer (thread/conversation ids) is added with the
 database baseline.
 """
 
+import logging
 import time
 from typing import Any, Callable
 
@@ -17,6 +18,8 @@ from app.ai_core.llm import DomainNotConfiguredError, LLMClientFactory
 from app.ai_core.run_records import RunRecord, RunRecordStore, RunStatus
 
 Workflow = Callable[[dict[str, Any]], dict[str, Any]]
+
+logger = logging.getLogger(__name__)
 
 
 class WorkflowNotFoundError(KeyError):
@@ -83,6 +86,17 @@ class WorkflowRunner:
             record.status = RunStatus.ERROR
             record.error = f"{type(exc).__name__}: {exc}"
             record.latency_ms = self._elapsed_ms(started)
+            # Metadata only: never log input/output state or exception
+            # messages, which may contain user content or credentials.
+            logger.error(
+                "ai_workflow_failed workflow_id=%s domain=%s run_id=%s "
+                "error_type=%s latency_ms=%d",
+                workflow_id,
+                domain,
+                record.run_id,
+                type(exc).__name__,
+                record.latency_ms,
+            )
             self._run_store.save(record)
             raise
 
