@@ -56,7 +56,13 @@ def test_resume_model_falls_back_to_shared_ai_model():
     from app.domains.support_copilot.domain import wire_support_copilot
 
     ai_core = create_ai_core()
-    settings = Settings(ai_provider="deepseek", ai_model="deepseek-flash")
+    settings = Settings(
+        _env_file=None,
+        ai_provider="deepseek",
+        ai_model="deepseek-flash",
+        resume_ats_model="",
+        support_model="",
+    )
     wire_resume_ats(ai_core, settings)
     wire_support_copilot(ai_core, settings)
 
