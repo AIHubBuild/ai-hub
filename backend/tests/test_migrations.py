@@ -75,6 +75,33 @@ def test_postgresql_offline_upgrade_compiles(tmp_path, capsys):
     assert "CREATE INDEX ix_admin_incidents_status" in sql
 
 
+def test_postgresql_offline_upgrade_accepts_percent_encoded_password(
+    tmp_path, monkeypatch, capsys
+):
+    import app.core.config as config_module
+
+    encoded_url = (
+        "postgresql+psycopg://test_user:test%24password@"
+        "db.example.com:5432/postgres?sslmode=require"
+    )
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("AI_DEPLOYMENT", "false")
+    monkeypatch.setenv("DATABASE_URL", encoded_url)
+    config_module.get_settings.cache_clear()
+    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+
+    try:
+        command.upgrade(cfg, "head", sql=True)
+    finally:
+        config_module.get_settings.cache_clear()
+
+    sql = capsys.readouterr().out
+    assert "CREATE TABLE ai_run_records" in sql
+    assert "CREATE TABLE admin_incidents" in sql
+    assert "CREATE TABLE user_entitlements" in sql
+
+
 def test_postgresql_offline_downgrade_compiles(tmp_path, capsys):
     cfg = make_alembic_config(tmp_path, POSTGRES_TEST_URL)
 

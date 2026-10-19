@@ -26,6 +26,11 @@ if config.config_file_name is not None:
     # in-process (for example from tests or a management command).
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
+def _set_sqlalchemy_url(url: str) -> None:
+    """Set the URL without ConfigParser treating percent escapes specially."""
+    config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
+
+
 settings = get_settings()
 configured_url = config.get_main_option("sqlalchemy.url")
 if configured_url:
@@ -36,12 +41,10 @@ if configured_url:
         update={"database_url": normalized_url}
     )
     validate_database_config(validated_settings)
-    config.set_main_option("sqlalchemy.url", normalized_url)
+    _set_sqlalchemy_url(normalized_url)
 else:
     validate_database_config(settings)
-    config.set_main_option(
-        "sqlalchemy.url", settings.sqlalchemy_database_url
-    )
+    _set_sqlalchemy_url(settings.sqlalchemy_database_url)
 
 target_metadata = Base.metadata
 
