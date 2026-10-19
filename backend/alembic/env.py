@@ -12,7 +12,11 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool
 
-from app.core.config import get_settings
+from app.core.config import (
+    get_settings,
+    normalize_database_url,
+    validate_database_config,
+)
 from app.models import Base
 
 config = context.config
@@ -22,8 +26,22 @@ if config.config_file_name is not None:
     # in-process (for example from tests or a management command).
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-if not config.get_main_option("sqlalchemy.url"):
-    config.set_main_option("sqlalchemy.url", get_settings().database_url)
+settings = get_settings()
+configured_url = config.get_main_option("sqlalchemy.url")
+if configured_url:
+    # Tests and explicit invocations may set the URL directly. Normalize
+    # bare PostgreSQL URLs and apply the same environment safety check.
+    normalized_url = normalize_database_url(configured_url)
+    validated_settings = settings.model_copy(
+        update={"database_url": normalized_url}
+    )
+    validate_database_config(validated_settings)
+    config.set_main_option("sqlalchemy.url", normalized_url)
+else:
+    validate_database_config(settings)
+    config.set_main_option(
+        "sqlalchemy.url", settings.sqlalchemy_database_url
+    )
 
 target_metadata = Base.metadata
 

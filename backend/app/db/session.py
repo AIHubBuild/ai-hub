@@ -14,10 +14,15 @@ from app.core.config import Settings
 
 
 def create_engine_from_settings(settings: Settings) -> Engine:
+    database_url = settings.sqlalchemy_database_url
     connect_args = {}
-    if settings.database_url.startswith("sqlite"):
+    if database_url.startswith("sqlite"):
         connect_args["check_same_thread"] = False
-    return create_engine(settings.database_url, connect_args=connect_args)
+    return create_engine(
+        database_url,
+        connect_args=connect_args,
+        pool_pre_ping=not database_url.startswith("sqlite"),
+    )
 
 
 def create_session_factory(engine: Engine) -> sessionmaker[Session]:

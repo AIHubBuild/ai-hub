@@ -21,6 +21,11 @@ from app.domains.resume_ats.workflow import ATS_WORKFLOW_ID
 from app.domains.support_copilot.workflow import SUPPORT_WORKFLOW_ID
 from app.main import create_app
 
+PRODUCTION_DATABASE_URL = (
+    "postgresql+psycopg://test_user:test_password@"
+    "db.example.com:5432/postgres"
+)
+
 PROVIDER_ENV_NAMES = (
     "AI_PROVIDER",
     "AI_API_KEY",
@@ -210,7 +215,7 @@ def production_settings(monkeypatch, tmp_path, **overrides) -> Settings:
         "ENVIRONMENT": "production",
         "AI_DEPLOYMENT": "true",
         "AI_API_KEY": "test-production-key",
-        "DATABASE_URL": f"sqlite:///{tmp_path / 'production.db'}",
+        "DATABASE_URL": PRODUCTION_DATABASE_URL,
     }
     values.update(overrides)
     return clean_settings(monkeypatch, **values)
@@ -385,7 +390,7 @@ def test_missing_environment_without_key_and_deployment_mode_starts_without_prov
         ENVIRONMENT=None,
         AI_DEPLOYMENT="true",
         AI_API_KEY="",
-        DATABASE_URL=f"sqlite:///{tmp_path / 'no-key-default-env.db'}",
+        DATABASE_URL=PRODUCTION_DATABASE_URL,
     )
 
     app = create_app(settings)
@@ -530,7 +535,7 @@ def test_deployment_mode_accepts_openai_even_in_development(
         AI_PROVIDER="openai",
         AI_BASE_URL="https://api.openai.com/v1",
         AI_MODEL="gpt-4.1-mini",
-        DATABASE_URL=f"sqlite:///{tmp_path / 'deployment-openai.db'}",
+        DATABASE_URL=PRODUCTION_DATABASE_URL,
     )
 
     app = create_app(settings)
@@ -689,7 +694,7 @@ def test_staging_with_openai_config_is_accepted(tmp_path, monkeypatch):
         AI_PROVIDER="openai",
         AI_BASE_URL="https://api.openai.com/v1",
         AI_MODEL="gpt-4.1-mini",
-        DATABASE_URL=f"sqlite:///{tmp_path / 'staging-openai.db'}",
+        DATABASE_URL=PRODUCTION_DATABASE_URL,
     )
 
     app = create_app(settings)

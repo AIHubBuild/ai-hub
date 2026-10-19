@@ -13,6 +13,7 @@ from app.api.routes import health
 from app.core.config import (
     Settings,
     get_settings,
+    validate_database_config,
     validate_production_ai_config,
 )
 from app.core.logging import configure_logging
@@ -27,6 +28,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings)
     validate_production_ai_config(settings)
+    validate_database_config(settings)
 
     app = FastAPI(
         title=settings.app_name,

@@ -28,6 +28,7 @@ def _to_model(record: RunRecord) -> AIRunRecord:
         output_state=record.output_state,
         status=record.status.value,
         error=record.error,
+        error_category=record.error_category,
         latency_ms=record.latency_ms,
         created_at=record.created_at,
     )
@@ -50,6 +51,7 @@ def _from_model(model: AIRunRecord) -> RunRecord:
         output_state=model.output_state,
         status=RunStatus(model.status),
         error=model.error,
+        error_category=model.error_category,
         latency_ms=model.latency_ms,
         created_at=created_at,
     )

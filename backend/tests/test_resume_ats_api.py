@@ -29,6 +29,7 @@ from app.domains.resume_ats.prompts import register_prompts
 from app.domains.resume_ats.workflow import ATS_WORKFLOW_ID, build_ats_workflow
 from app.main import create_app
 from app.models import Base
+from app.models.admin import UserAccountStatus
 from app.models.resume import AtsAnalysisRecord, Resume
 
 RESUME_TEXT = (
@@ -173,6 +174,21 @@ def test_download_requires_authentication(client):
     )
 
     assert response.status_code == 401
+
+
+def test_suspended_user_cannot_access_resume_ats(client):
+    test_client, app = client
+    with app.state.session_factory() as session:
+        session.add(UserAccountStatus(user_id=USER_A, status="suspended"))
+        session.commit()
+
+    response = upload_resume(test_client, user_id=USER_A)
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "success": False,
+        "message": "This account is suspended.",
+    }
 
 
 def test_invalid_token_is_rejected(client):

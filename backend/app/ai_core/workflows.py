@@ -85,6 +85,7 @@ class WorkflowRunner:
         except Exception as exc:
             record.status = RunStatus.ERROR
             record.error = f"{type(exc).__name__}: {exc}"
+            record.error_category = type(exc).__name__
             record.latency_ms = self._elapsed_ms(started)
             # Metadata only: never log input/output state or exception
             # messages, which may contain user content or credentials.

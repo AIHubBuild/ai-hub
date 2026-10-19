@@ -39,6 +39,9 @@ class AIRunRecord(Base):
         String(16), nullable=False, default=_RUN_STATUS_DEFAULT
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_category: Mapped[str | None] = mapped_column(
+        String(100), nullable=True
+    )
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

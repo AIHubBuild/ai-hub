@@ -36,6 +36,7 @@ class RunRecord(BaseModel):
     output_state: dict[str, Any] | None = None
     status: RunStatus = RunStatus.SUCCESS
     error: str | None = None
+    error_category: str | None = None
     latency_ms: int = 0
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)

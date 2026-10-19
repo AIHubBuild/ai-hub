@@ -50,8 +50,10 @@ those documents are the primary source of truth for the platform.
 - **Frontend:** Next.js (React, TypeScript, Tailwind CSS) — one shell with per-assistant routes.
 - **Backend:** FastAPI (Python) — modular monolith with a pluggable domain
   contract (`backend/app/domains/`).
-- **Future services** (not yet implemented): PostgreSQL (Supabase), Supabase
-  Auth/Storage, LangGraph + OpenAI, AWS/Terraform, Vercel deployment, CI/CD.
+- **Database:** SQLite for local development/tests; Supabase PostgreSQL
+  (`postgresql+psycopg`) for staging and production through Alembic.
+- **Future services** (not yet implemented): Supabase Storage, AWS/Terraform,
+  Vercel deployment, CI/CD.
 
 The platform-first rule: assistants are **consumers** of AI Hub. Adding a
 new assistant must not require restructuring the platform
@@ -107,6 +109,13 @@ AI provider configuration is explicit. Local development must set
 leave `AI_DEPLOYMENT=false`. Staging and production must set
 `AI_DEPLOYMENT=true` and use OpenAI; startup fails if deployment mode is
 missing or false outside explicit local/test environments.
+
+Database configuration follows the same fail-fast rule. Local development
+and tests may use SQLite. Deployment mode, staging, and production require
+an explicit Supabase PostgreSQL URL with the psycopg 3 driver
+(`postgresql+psycopg://...`); startup and Alembic refuse to run against
+SQLite in those environments. Keep TLS enabled and do not use a
+transaction pooler for migrations.
 
 ### Backend (FastAPI)
 

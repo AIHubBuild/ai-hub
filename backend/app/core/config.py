@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from fastapi import Request
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -21,6 +22,8 @@ DEFAULT_AI_MODEL = "deepseek-flash"
 NON_PRODUCTION_ENVIRONMENTS = frozenset(
     {"development", "dev", "test", "testing"}
 )
+DEFAULT_DATABASE_URL = "sqlite:///./aihub_dev.db"
+POSTGRES_DRIVER = "postgresql+psycopg"
 OPENAI_PROVIDER_NAME = "openai"
 OPENAI_BASE_URL_HOST = "api.openai.com"
 
@@ -31,6 +34,48 @@ class ProductionProviderConfigError(RuntimeError):
     The message is deliberately fixed: validation must never echo
     environment values, model names, URLs, or API keys into logs.
     """
+
+
+class DatabaseConfigError(RuntimeError):
+    """Database configuration is not valid for the selected environment.
+
+    Messages are deliberately fixed and never include connection strings,
+    credentials, hosts, or driver exception details.
+    """
+
+
+def normalize_database_url(value: str) -> str:
+    """Return a SQLAlchemy URL with the supported driver applied.
+
+    SQLite is returned unchanged. PostgreSQL URLs without a driver, or
+    with the legacy ``postgresql``/``postgres`` names, are normalized to
+    psycopg 3 (`postgresql+psycopg`). Unsupported drivers and schemes are
+    rejected. Error messages never include the connection string.
+    """
+    raw = (value or "").strip()
+    if not raw:
+        raise DatabaseConfigError("DATABASE_URL must not be empty.")
+    try:
+        parsed = make_url(raw)
+    except Exception:
+        raise DatabaseConfigError(
+            "DATABASE_URL is not a valid SQLAlchemy database URL."
+        ) from None
+
+    backend = parsed.get_backend_name()
+    if backend == "sqlite":
+        return raw
+    if backend in {"postgresql", "postgres"}:
+        if parsed.drivername in {"postgresql", "postgres"}:
+            parsed = parsed.set(drivername=POSTGRES_DRIVER)
+        elif parsed.drivername != POSTGRES_DRIVER:
+            raise DatabaseConfigError(
+                "PostgreSQL DATABASE_URL must use the psycopg 3 driver "
+                "(postgresql+psycopg://)."
+            )
+        return parsed.render_as_string(hide_password=False)
+
+    raise DatabaseConfigError("DATABASE_URL must use SQLite or PostgreSQL.")
 
 
 class Settings(BaseSettings):
@@ -58,8 +103,10 @@ class Settings(BaseSettings):
 
     # Database (docs/05_Database_Design.md: PostgreSQL via Supabase).
     # Local development defaults to a gitignored SQLite file; staging and
-    # production set DATABASE_URL to the Supabase PostgreSQL connection.
-    database_url: str = "sqlite:///./aihub_dev.db"
+    # production require an explicit Supabase PostgreSQL URL using the
+    # psycopg 3 driver. ``repr=False`` keeps the password out of
+    # accidental configuration dumps/logs.
+    database_url: str = Field(default=DEFAULT_DATABASE_URL, repr=False)
 
     # Supabase (Authentication + PostgreSQL + Storage) — introduced in
     # Phase 1. All fields are optional: local development works without
@@ -67,7 +114,7 @@ class Settings(BaseSettings):
     # tokens until `supabase_jwt_secret` is configured.
     supabase_url: str = ""
     supabase_anon_key: str = ""
-    supabase_jwt_secret: str = ""
+    supabase_jwt_secret: str = Field(default="", repr=False)
     # Optional override for the Supabase JWKS endpoint. Defaults to
     # {supabase_url}/auth/v1/.well-known/jwks.json when unset.
     supabase_jwks_url: str = ""
@@ -162,6 +209,11 @@ class Settings(BaseSettings):
 
     # Upload limits (resume_ats domain).
     max_upload_size_mb: int = 5
+
+    @property
+    def sqlalchemy_database_url(self) -> str:
+        """The database URL with the configured driver normalized."""
+        return normalize_database_url(self.database_url)
 
     @property
     def ai_provider_name(self) -> str:
@@ -310,6 +362,30 @@ def validate_production_ai_config(settings: Settings) -> None:
         raise ProductionProviderConfigError(
             "Staging and production must use OpenAI. Check AI_PROVIDER, "
             "AI_BASE_URL, AI_MODEL, RESUME_ATS_MODEL, and SUPPORT_MODEL."
+        )
+
+
+def validate_database_config(settings: Settings) -> None:
+    """Fail fast when a deployment environment is backed by SQLite.
+
+    Explicit local/test environments may use SQLite without deployment
+    mode. Deployment mode, staging, production, and an unspecified
+    environment require an explicit Supabase PostgreSQL URL using the
+    psycopg 3 driver. The error message is fixed and never echoes the
+    connection string or credentials.
+    """
+    url = settings.sqlalchemy_database_url
+    environment = settings.environment.strip().lower()
+    local_environment = (
+        "environment" in settings.model_fields_set
+        and environment in NON_PRODUCTION_ENVIRONMENTS
+    )
+    deployment_like = settings.ai_deployment or not local_environment
+    if deployment_like and not url.startswith(f"{POSTGRES_DRIVER}://"):
+        raise DatabaseConfigError(
+            "Deployment environments require DATABASE_URL to be an explicit "
+            "Supabase PostgreSQL URL using the psycopg 3 driver "
+            "(postgresql+psycopg://)."
         )
 
 
