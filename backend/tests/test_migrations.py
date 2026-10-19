@@ -30,14 +30,14 @@ def table_names(db_url: str) -> set[str]:
         return set(inspect(connection).get_table_names())
 
 
-def test_migration_graph_has_single_head_at_0009(tmp_path):
+def test_migration_graph_has_single_head_at_0010(tmp_path):
     cfg = make_alembic_config(
         tmp_path, f"sqlite:///{tmp_path / 'head.db'}"
     )
 
     script = ScriptDirectory.from_config(cfg)
 
-    assert script.get_heads() == ["0009"]
+    assert script.get_heads() == ["0010"]
 
 
 def test_alembic_rejects_sqlite_in_production(tmp_path, monkeypatch):
@@ -75,6 +75,8 @@ def test_postgresql_offline_upgrade_compiles(tmp_path, capsys):
     assert "user_profiles_update_own" not in sql
     assert "REVOKE INSERT, UPDATE, DELETE" in sql
     assert "GRANT SELECT ON TABLE user_profiles" in sql
+    assert "REVOKE ALL ON TABLE user_profiles FROM authenticated" in sql
+    assert "GRANT INSERT, UPDATE" not in sql
     assert "ALTER TABLE admin_audit_events ADD COLUMN actor_user_id UUID" in sql
     assert "ALTER TABLE admin_audit_events ALTER COLUMN admin_user_id DROP NOT NULL" in sql
     assert "CREATE INDEX ix_ai_run_records_domain_created_at" in sql
@@ -112,7 +114,7 @@ def test_postgresql_offline_upgrade_accepts_percent_encoded_password(
 def test_postgresql_offline_downgrade_compiles(tmp_path, capsys):
     cfg = make_alembic_config(tmp_path, POSTGRES_TEST_URL)
 
-    command.downgrade(cfg, "0009:0003", sql=True)
+    command.downgrade(cfg, "0010:0003", sql=True)
 
     sql = capsys.readouterr().out
     assert "DROP TABLE user_profiles" in sql
