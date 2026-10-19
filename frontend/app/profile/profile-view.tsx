@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "../components/auth/auth-provider";
+import { CountrySelect } from "../components/country-select";
 import { ApiError } from "../lib/api";
 import {
   fetchProfile,
@@ -62,7 +63,7 @@ export function ProfileView() {
         if (next !== null) {
           setFullName(next.full_name);
           setPhone(next.phone ?? "");
-          setCountry(next.country_code ?? "");
+          setCountry(next.country_code?.trim().toUpperCase() ?? "");
           setCity(next.city ?? "");
           setCareerGoal(next.career_goal ?? "");
           setMarketingConsent(next.marketing_consent);
@@ -75,7 +76,7 @@ export function ProfileView() {
           setPhone(typeof metadata.phone === "string" ? metadata.phone : "");
           setCountry(
             typeof metadata.country_code === "string"
-              ? metadata.country_code
+              ? metadata.country_code.trim().toUpperCase()
               : "",
           );
           setCity(typeof metadata.city === "string" ? metadata.city : "");
@@ -124,7 +125,7 @@ export function ProfileView() {
     }
     const countryCode = normalizeCountryCode(country);
     if (country.trim() && countryCode === null) {
-      setError("Enter a two-letter country code, such as US.");
+      setError("Select a country from the list.");
       return;
     }
     if (profile === null && !acceptedPolicies) {
@@ -152,7 +153,7 @@ export function ProfileView() {
         setProfile(saved);
         setFullName(saved.full_name);
         setPhone(saved.phone ?? "");
-        setCountry(saved.country_code ?? "");
+        setCountry(saved.country_code?.trim().toUpperCase() ?? "");
         setCity(saved.city ?? "");
         setCareerGoal(saved.career_goal ?? "");
         setMarketingConsent(saved.marketing_consent);
@@ -318,15 +319,11 @@ export function ProfileView() {
                   Country{" "}
                   <span className="font-normal text-muted">(optional)</span>
                 </label>
-                <input
+                <CountrySelect
                   id="profile-country"
-                  type="text"
-                  maxLength={2}
-                  pattern="[A-Za-z]{2}"
-                  placeholder="US"
                   value={country}
-                  onChange={(event) => setCountry(event.target.value)}
-                  className="ui-field uppercase"
+                  onChange={setCountry}
+                  placeholder="Search countries"
                 />
               </div>
             </div>

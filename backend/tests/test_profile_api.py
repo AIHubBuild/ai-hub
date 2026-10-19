@@ -141,7 +141,29 @@ def test_create_and_get_profile(app, client):
         stored = session.get(UserProfile, USER_A)
         assert stored is not None
         assert stored.full_name == "Alex Example"
+        assert stored.country_code == "US"
         assert stored.marketing_consent is True
+
+
+@pytest.mark.parametrize(
+    ("country_code", "expected"),
+    [("de", "DE"), ("ng", "NG"), ("us", "US")],
+)
+def test_country_code_is_stored_as_iso_alpha_2(
+    app, client, country_code, expected
+):
+    response = client.put(
+        "/api/v1/profile",
+        headers=auth_headers(),
+        json=profile_payload(country_code=country_code),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["country_code"] == expected
+    with app.state.session_factory() as session:
+        stored = session.get(UserProfile, USER_A)
+        assert stored is not None
+        assert stored.country_code == expected
 
 
 def test_profile_creation_requires_policy_acceptance(app, client):

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../components/auth/auth-provider";
 import { Spinner } from "../../components/auth/spinner";
+import { CountrySelect } from "../../components/country-select";
 import { ApiError } from "../../lib/api";
 import {
   fetchProfile,
@@ -74,7 +75,7 @@ export function CompleteRegistrationView() {
         setPhone(typeof metadata.phone === "string" ? metadata.phone : "");
         setCountry(
           typeof metadata.country_code === "string"
-            ? metadata.country_code
+            ? metadata.country_code.trim().toUpperCase()
             : "",
         );
         setCity(typeof metadata.city === "string" ? metadata.city : "");
@@ -129,7 +130,7 @@ export function CompleteRegistrationView() {
     }
     const countryCode = normalizeCountryCode(country);
     if (country.trim() && countryCode === null) {
-      errors.country = "Enter a two-letter country code, such as US.";
+      errors.country = "Select a country from the list.";
     }
     if (!policiesAcceptedAtSignup && !acceptedPolicies) {
       errors.policies = "Accept the Terms of Service and Privacy Notice.";
@@ -308,19 +309,15 @@ export function CompleteRegistrationView() {
               >
                 Country <span className="font-normal normal-case tracking-normal text-muted">(optional)</span>
               </label>
-              <input
+              <CountrySelect
                 id="registration-country"
-                type="text"
-                maxLength={2}
-                pattern="[A-Za-z]{2}"
-                placeholder="US"
                 value={country}
-                onChange={(event) => setCountry(event.target.value)}
-                aria-invalid={fieldErrors.country ? true : undefined}
-                aria-describedby={
+                onChange={setCountry}
+                placeholder="Search countries"
+                ariaInvalid={Boolean(fieldErrors.country)}
+                ariaDescribedBy={
                   fieldErrors.country ? "registration-country-error" : undefined
                 }
-                className="ui-field uppercase"
               />
               {fieldErrors.country && (
                 <p id="registration-country-error" className="auth-field-error mt-1.5 text-xs">
