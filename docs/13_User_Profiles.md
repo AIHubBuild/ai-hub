@@ -39,7 +39,11 @@ PUT /api/v1/profile
 
 - Ownership comes only from the verified JWT `sub`; `user_id` is rejected
   in request bodies.
-- The API uses `require_verified_email`, so suspended and unverified accounts are denied.
+- The profile API uses `require_verified_email`, so suspended and unverified
+  accounts are denied.
+- ATS Resume Assistant and IT Support Copilot additionally require a complete
+  required profile (`require_complete_profile`); a verified user without a
+  profile receives `403 Profile completion required.`
 - Profile creation requires Terms and Privacy acceptance.
 - Updates require full-name validation and optional phone, country, and
   city validation.
@@ -52,8 +56,8 @@ PUT /api/v1/profile
 
 The production flow is email-first:
 
-1. `POST` signup through Supabase Auth with email, password, and a fresh
-   hCaptcha token.
+1. `POST` signup through Supabase Auth with full name, email, password,
+   required Terms/Privacy acceptance, and a fresh hCaptcha token.
 2. If confirmation is required, show a pending screen with resend support.
    No profile row or protected application access is available yet.
 3. The confirmation link redirects to `/auth/callback`. The client uses
@@ -61,9 +65,10 @@ The production flow is email-first:
    when the Supabase email template supplies `token_hash`.
 4. Only after the session reports a confirmed email does the user continue
    to `/register/complete`.
-5. Complete registration collects full name, optional phone, country, city,
-   career goal, and optional marketing consent. Terms and Privacy acceptance
-   are required at this step.
+5. Complete registration pre-fills the full name accepted at signup and
+   collects country, city, optional phone, optional career goal, and optional
+   marketing consent. Terms/Privacy acceptance is carried from signup in Auth
+   metadata; legacy accounts without that metadata get a required checkbox.
 6. The profile is saved through `PUT /api/v1/profile`; the backend checks
    verified email and account status independently.
 
@@ -153,8 +158,10 @@ Verification sequence:
    is saved through the backend.
 5. Verify an unconfirmed account receives HTTP 403 from `/api/v1/profile`,
    `/api/v1/resumes`, and `/api/v1/support/sessions`.
-6. Verify a confirmed account receives HTTP 200 and only its own profile.
-7. Using the Supabase Data API with a user JWT, verify direct SELECT returns
+6. Verify a verified account without a profile receives
+   `403 Profile completion required.` from ATS and IT Support.
+7. Verify a confirmed account receives HTTP 200 and only its own profile.
+8. Using the Supabase Data API with a user JWT, verify direct SELECT returns
    only the user's row and direct INSERT/UPDATE are denied.
-8. Verify service-role access remains backend-only and is never shipped to
+9. Verify service-role access remains backend-only and is never shipped to
    the frontend.

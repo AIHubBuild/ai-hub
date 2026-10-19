@@ -1,7 +1,19 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { HubMarkIcon } from "./icons";
 
 export function SiteFooter() {
+  const pathname = usePathname();
+  if (
+    pathname === "/login" ||
+    pathname.startsWith("/register") ||
+    pathname.startsWith("/auth")
+  ) {
+    return null;
+  }
+
   return (
     <footer className="mt-auto border-t border-line">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">

@@ -181,3 +181,98 @@ body {
     border-color: var(--line);
   }
 }
+
+/* ------------------------------------------------------------
+   Authentication experience
+   ------------------------------------------------------------ */
+
+.auth-shell {
+  --canvas: #08090d;
+  --surface: #0f1117;
+  --surface-muted: #171a23;
+  --ink: #f5f7ff;
+  --ink-soft: #c9cee0;
+  --muted: #9098ab;
+  --line: #252a38;
+  --accent: #7c8cff;
+  --accent-strong: #98a5ff;
+  --accent-soft: #182044;
+  --success: #58d68d;
+  --danger: #ff8f8f;
+  color-scheme: dark;
+  background-color: var(--canvas);
+  color: var(--ink);
+}
+
+.auth-card {
+  border: 1px solid rgb(255 255 255 / 0.09);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.035), transparent 35%),
+    linear-gradient(180deg, #141720 0%, #0c0e14 100%);
+  box-shadow:
+    0 32px 90px rgb(0 0 0 / 0.5),
+    0 1px 0 rgb(255 255 255 / 0.06) inset;
+  backdrop-filter: blur(18px);
+}
+
+.auth-shell .ui-field {
+  background-color: rgb(255 255 255 / 0.035);
+  border-color: rgb(255 255 255 / 0.12);
+  color: var(--ink);
+}
+
+.auth-shell .ui-field:hover {
+  border-color: rgb(255 255 255 / 0.2);
+}
+
+.auth-shell .ui-field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(124 140 255 / 0.18);
+}
+
+.auth-shell .ui-field[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgb(255 143 143 / 0.12);
+}
+
+.auth-shell .ui-button-primary {
+  background: linear-gradient(135deg, #6d7fff 0%, #8f6bff 100%);
+  box-shadow:
+    0 10px 24px rgb(109 127 255 / 0.26),
+    0 1px 0 rgb(255 255 255 / 0.16) inset;
+}
+
+.auth-shell .ui-button-primary:hover {
+  background: linear-gradient(135deg, #7d8cff 0%, #9b7bff 100%);
+}
+
+.auth-shell .ui-button-secondary {
+  border-color: rgb(255 255 255 / 0.12);
+  background-color: rgb(255 255 255 / 0.03);
+  color: var(--ink);
+}
+
+.auth-shell .ui-button-secondary:hover {
+  border-color: rgb(255 255 255 / 0.22);
+  background-color: rgb(255 255 255 / 0.06);
+}
+
+.auth-shell .ui-eyebrow {
+  color: var(--accent);
+}
+
+.auth-shell .auth-message-error {
+  border: 1px solid rgb(255 143 143 / 0.22);
+  background-color: rgb(255 143 143 / 0.08);
+  color: #ffd1d1;
+}
+
+.auth-shell .auth-message-success {
+  border: 1px solid rgb(88 214 141 / 0.22);
+  background-color: rgb(88 214 141 / 0.08);
+  color: #c7f7d8;
+}
+
+.auth-field-error {
+  color: var(--danger);
+}

@@ -10,10 +10,12 @@ from app.core.audit import record_admin_audit_event
 from app.core.security import AuthUser, get_current_user
 from app.db.session import get_db
 from app.models.admin import AdminUser, UserAccountStatus
+from app.models.profile import UserProfile
 
 SUSPENDED_MESSAGE = "This account is suspended."
 ADMIN_REQUIRED_MESSAGE = "Administrator access required."
 VERIFICATION_REQUIRED_MESSAGE = "Email verification is required."
+PROFILE_REQUIRED_MESSAGE = "Profile completion required."
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +75,17 @@ def require_verified_email(
             return user.model_copy(update={"email_verified": True})
 
     raise _forbidden(VERIFICATION_REQUIRED_MESSAGE)
+
+
+def require_complete_profile(
+    user: AuthUser = Depends(require_verified_email),
+    session: Session = Depends(get_db),
+) -> AuthUser:
+    """Return the user only when a complete required profile exists."""
+    profile = session.get(UserProfile, user.id)
+    if profile is None or not profile.full_name.strip():
+        raise _forbidden(PROFILE_REQUIRED_MESSAGE)
+    return user
 
 
 def _audit_denied_admin_access(

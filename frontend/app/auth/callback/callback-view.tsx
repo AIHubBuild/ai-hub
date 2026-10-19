@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { getSupabase } from "../../lib/supabase";
+import { Spinner } from "../../components/auth/spinner";
 
 type VerificationType =
   | "signup"
@@ -155,9 +156,18 @@ export function AuthCallbackView() {
   ]);
 
   return (
-    <section className="rounded-2xl bg-surface p-8 text-center ring-1 ring-line/80">
-      <p className="ui-eyebrow">Email verification</p>
-      <h1 className="ui-display mt-3 text-3xl text-ink">
+    <div className="text-center">
+      <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-accent/25 bg-accent-soft text-accent">
+        {status === "loading" ? (
+          <Spinner className="h-5 w-5" />
+        ) : status === "pending" ? (
+          <span aria-hidden="true" className="text-2xl">✉</span>
+        ) : (
+          <span aria-hidden="true" className="text-2xl">!</span>
+        )}
+      </span>
+      <p className="ui-eyebrow mt-5">Email verification</p>
+      <h1 className="mt-2 text-[26px] font-semibold tracking-[-0.03em] text-ink">
         {status === "loading"
           ? "Verifying your email"
           : status === "pending"
@@ -178,6 +188,6 @@ export function AuthCallbackView() {
           </Link>
         </div>
       )}
-    </section>
+    </div>
   );
 }

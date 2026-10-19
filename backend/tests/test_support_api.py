@@ -22,6 +22,8 @@ from app.main import create_app
 from app.models import Base
 from app.models.support import SupportSession, SupportTicket
 
+from tests.profile_test_helpers import seed_complete_profile
+
 TEST_SECRET = "test-jwt-secret-0123456789abcdef0123456789abcdef0123456789abcdef"
 
 USER_A = "550e8400-e29b-41d4-a716-446655440000"
@@ -76,6 +78,7 @@ def make_settings(tmp_path, **overrides) -> Settings:
 def build_app(tmp_path, settings: Settings, provider: FakeProvider | None) -> FastAPI:
     app = create_app(settings)
     Base.metadata.create_all(app.state.engine)
+    seed_complete_profile(app, USER_A, USER_B)
     run_store = SQLAlchemyRunRecordStore(app.state.session_factory)
     ai_core = create_ai_core(run_store=run_store)
     if provider is not None:
@@ -99,6 +102,7 @@ def client(tmp_path):
         ]
     )
     app = build_app(tmp_path, make_settings(tmp_path), provider)
+    seed_complete_profile(app, USER_A, USER_B)
     with TestClient(app) as test_client:
         yield test_client, app
 
@@ -132,6 +136,19 @@ def test_unverified_user_cannot_create_support_session(client):
 
     assert response.status_code == 403
     assert response.json()["message"] == "Email verification is required."
+
+
+def test_user_without_profile_cannot_create_support_session(client):
+    test_client, _ = client
+    unprofiled = "770e8400-e29b-41d4-a716-446655440099"
+
+    response = test_client.post(
+        "/api/v1/support/sessions",
+        headers=auth_headers(unprofiled),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["message"] == "Profile completion required."
 
 
 def test_create_session_requires_authentication(client):
@@ -310,6 +327,7 @@ def test_message_on_resolved_session_returns_409(client):
 def test_security_issue_escalates_on_first_message(tmp_path):
     provider = FakeProvider(responses=["security_issue"])
     app = build_app(tmp_path, make_settings(tmp_path), provider)
+    seed_complete_profile(app, USER_A, USER_B)
     with TestClient(app) as test_client:
         session_id = create_session(test_client).json()["data"]["session_id"]
 
@@ -341,6 +359,7 @@ def test_blue_screen_follow_up_is_context_aware(tmp_path):
         ]
     )
     app = build_app(tmp_path, make_settings(tmp_path), provider)
+    seed_complete_profile(app, USER_A, USER_B)
     with TestClient(app) as test_client:
         session_id = create_session(test_client).json()["data"]["session_id"]
 
@@ -383,6 +402,7 @@ def test_business_impact_requests_escalation_without_claiming_handoff(tmp_path):
     """Business impact requests escalation, but no human has accepted it."""
     provider = FakeProvider(responses=["vpn_issue"])
     app = build_app(tmp_path, make_settings(tmp_path), provider)
+    seed_complete_profile(app, USER_A, USER_B)
     with TestClient(app) as test_client:
         session_id = create_session(test_client).json()["data"]["session_id"]
         send_message(test_client, session_id, "Cannot connect to the VPN")
@@ -489,6 +509,7 @@ def test_message_without_provider_returns_503(tmp_path):
 def test_provider_failure_returns_502_and_persists_nothing(tmp_path):
     provider = FakeProvider(error=ProviderError("HTTP 500", status=500))
     app = build_app(tmp_path, make_settings(tmp_path), provider)
+    seed_complete_profile(app, USER_A, USER_B)
     with TestClient(app) as test_client:
         session_id = create_session(test_client).json()["data"]["session_id"]
         response = send_message(test_client, session_id, "VPN broken")
@@ -508,6 +529,7 @@ def test_provider_failure_persists_error_run_record(tmp_path):
 
     provider = FakeProvider(error=ProviderError("HTTP 500", status=500))
     app = build_app(tmp_path, make_settings(tmp_path), provider)
+    seed_complete_profile(app, USER_A, USER_B)
     with TestClient(app) as test_client:
         session_id = create_session(test_client).json()["data"]["session_id"]
         send_message(test_client, session_id, "VPN broken")

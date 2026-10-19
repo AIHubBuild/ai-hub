@@ -24,6 +24,8 @@ from app.main import create_app
 from app.models import Base
 from app.models.support import SupportTicket
 
+from tests.profile_test_helpers import seed_complete_profile
+
 TEST_SECRET = "test-jwt-secret-0123456789abcdef0123456789abcdef0123456789abcdef"
 USER_A = "550e8400-e29b-41d4-a716-446655440000"
 
@@ -86,6 +88,7 @@ def client(tmp_path):
         ]
     )
     app = build_app(tmp_path, provider)
+    seed_complete_profile(app, USER_A)
     with TestClient(app) as test_client:
         yield test_client, app, provider
 

@@ -4,10 +4,19 @@ import HCaptcha from "@hcaptcha/react-hcaptcha";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
-import { fetchProfile } from "../lib/profile";
+import { fetchProfile, PROFILE_POLICY_VERSION } from "../lib/profile";
 import { getSupabase } from "../lib/supabase";
+import { PasswordInput } from "../components/auth/password-input";
+import { Spinner } from "../components/auth/spinner";
 
 type Mode = "sign-in" | "sign-up" | "verify-email";
+
+type FieldErrors = {
+  fullName?: string;
+  email?: string;
+  password?: string;
+  policies?: string;
+};
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HCAPTCHA_SITE_KEY = (
@@ -22,7 +31,6 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawRedirect = searchParams.get("redirect") ?? "/";
-  // Only allow internal paths — never navigate to external origins.
   const redirect =
     rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
       ? rawRedirect
@@ -31,11 +39,14 @@ export function LoginForm() {
   const [mode, setMode] = useState<Mode>("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
   const captchaRef = useRef<HCaptcha>(null);
@@ -44,18 +55,8 @@ export function LoginForm() {
 
   if (supabase === null) {
     return (
-      <div
-        role="alert"
-        className="rounded-2xl bg-surface p-6 text-center ring-1 ring-line/80"
-      >
-        <h2 className="text-sm font-medium text-ink">
-          Supabase is not configured
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-muted">
-          Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-          <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to enable
-          authentication.
-        </p>
+      <div className="auth-message-error rounded-2xl border p-5 text-center text-sm">
+        Supabase authentication is not configured for this deployment.
       </div>
     );
   }
@@ -67,10 +68,10 @@ export function LoginForm() {
 
   function validateCaptcha(): string | null {
     if (!HCAPTCHA_SITE_KEY) {
-      return "hCaptcha is not configured. Set NEXT_PUBLIC_HCAPTCHA_SITE_KEY and rebuild the frontend.";
+      return "hCaptcha is not configured. Add NEXT_PUBLIC_HCAPTCHA_SITE_KEY and rebuild the frontend.";
     }
     if (captchaToken === null) {
-      return "Complete the CAPTCHA before continuing.";
+      return "Complete the CAPTCHA to continue.";
     }
     return null;
   }
@@ -78,9 +79,38 @@ export function LoginForm() {
   function switchMode(nextMode: Mode) {
     resetCaptcha();
     setCaptchaError(null);
+    setFieldErrors({});
     setMode(nextMode);
     setError(null);
     setNotice(null);
+  }
+
+  function validateSignUpFields(): FieldErrors {
+    const errors: FieldErrors = {};
+    if (fullName.trim().length < 2) {
+      errors.fullName = "Enter your full name.";
+    }
+    if (!EMAIL_PATTERN.test(email.trim())) {
+      errors.email = "Enter a valid email address.";
+    }
+    if (password.length < 8) {
+      errors.password = "Use at least 8 characters.";
+    }
+    if (!acceptedPolicies) {
+      errors.policies = "Accept the Terms of Service and Privacy Notice.";
+    }
+    return errors;
+  }
+
+  function validateSignInFields(): FieldErrors {
+    const errors: FieldErrors = {};
+    if (!EMAIL_PATTERN.test(email.trim())) {
+      errors.email = "Enter a valid email address.";
+    }
+    if (!password) {
+      errors.password = "Enter your password.";
+    }
+    return errors;
   }
 
   async function handleSignUp() {
@@ -88,16 +118,13 @@ export function LoginForm() {
     if (client === null) {
       return;
     }
-    if (!EMAIL_PATTERN.test(email.trim())) {
-      setError("Enter a valid email address.");
-      return;
-    }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+    const errors = validateSignUpFields();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
       return;
     }
     if (captchaToken === null) {
-      setError("Complete the CAPTCHA before continuing.");
+      setError("Complete the CAPTCHA to continue.");
       return;
     }
 
@@ -107,6 +134,13 @@ export function LoginForm() {
       options: {
         emailRedirectTo: verificationCallbackUrl(),
         captchaToken,
+        data: {
+          full_name: fullName.trim(),
+          terms_accepted: true,
+          privacy_accepted: true,
+          terms_version: PROFILE_POLICY_VERSION,
+          privacy_version: PROFILE_POLICY_VERSION,
+        },
       },
     });
 
@@ -115,7 +149,7 @@ export function LoginForm() {
       const message = authError.message.toLowerCase();
       if (message.includes("already registered")) {
         setError(
-          "An account may already exist for this email. Sign in or reset the password.",
+          "An account may already exist for this email. Sign in or reset your password.",
         );
       } else if (message.includes("captcha")) {
         setError("CAPTCHA verification failed. Try again.");
@@ -148,12 +182,13 @@ export function LoginForm() {
     if (client === null) {
       return;
     }
-    if (!EMAIL_PATTERN.test(email.trim()) || !password) {
-      setError("Enter your email address and password.");
+    const errors = validateSignInFields();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
       return;
     }
     if (captchaToken === null) {
-      setError("Complete the CAPTCHA before continuing.");
+      setError("Complete the CAPTCHA to continue.");
       return;
     }
 
@@ -202,7 +237,7 @@ export function LoginForm() {
         return;
       }
     } catch {
-      // Keep the existing destination; protected pages will enforce access.
+      // Protected pages enforce account and profile access server-side.
     }
 
     router.push(redirect);
@@ -220,7 +255,7 @@ export function LoginForm() {
       return;
     }
     if (captchaToken === null) {
-      setError("Complete the CAPTCHA before resending.");
+      setError("Complete the CAPTCHA to resend.");
       return;
     }
 
@@ -263,6 +298,7 @@ export function LoginForm() {
     event.preventDefault();
     setError(null);
     setNotice(null);
+    setFieldErrors({});
 
     const captchaValidationError = validateCaptcha();
     if (captchaValidationError !== null) {
@@ -282,22 +318,50 @@ export function LoginForm() {
     }
   }
 
+  const heading =
+    mode === "sign-in"
+      ? "Welcome back"
+      : mode === "sign-up"
+        ? "Create your account"
+        : "Check your inbox";
+
+  const supportingText =
+    mode === "sign-in"
+      ? "Sign in to continue to your private AI workspace."
+      : mode === "sign-up"
+        ? "Create your account, verify your email, then add your location and optional profile details."
+        : "Confirm your email address before completing registration.";
+
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-2xl bg-surface p-6 ring-1 ring-line/80 sm:p-7"
-    >
+    <form onSubmit={handleSubmit} className="space-y-5">
       {mode !== "verify-email" && (
-        <div className="mb-6 flex rounded-lg bg-surface-muted p-0.5">
+        <div className="text-center">
+          <p className="ui-eyebrow">AI Hub Assist</p>
+          <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.035em] text-ink sm:text-[32px]">
+            {heading}
+          </h1>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted">
+            {supportingText}
+          </p>
+        </div>
+      )}
+
+      {mode !== "verify-email" && (
+        <div
+          role="tablist"
+          aria-label="Authentication mode"
+          className="grid grid-cols-2 gap-1 rounded-xl border border-line bg-surface-muted p-1"
+        >
           {(["sign-in", "sign-up"] as const).map((option) => (
             <button
               key={option}
               type="button"
+              role="tab"
+              aria-selected={mode === option}
               onClick={() => switchMode(option)}
-              aria-pressed={mode === option}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
                 mode === option
-                  ? "bg-surface text-ink shadow-sm"
+                  ? "bg-surface text-ink shadow-sm ring-1 ring-white/10"
                   : "text-muted hover:text-ink"
               }`}
             >
@@ -308,109 +372,172 @@ export function LoginForm() {
       )}
 
       {mode === "verify-email" ? (
-        <div>
-          <p className="ui-eyebrow">Verify your email</p>
-          <h2 className="ui-display mt-2 text-2xl text-ink">
-            Check your inbox
-          </h2>
-          <p className="mt-3 text-sm leading-6 text-muted">
+        <div className="text-center">
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-accent/25 bg-accent-soft text-2xl text-accent">
+            ✉
+          </span>
+          <h1 className="mt-5 text-[26px] font-semibold tracking-[-0.03em] text-ink">
+            {heading}
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-muted">
             We sent a confirmation link to{" "}
             <span className="font-medium text-ink">
               {pendingEmail || "your email address"}
             </span>
-            . Open the link in this browser to verify your email and continue
-            registration.
+            .
           </p>
           <p className="mt-3 text-xs leading-5 text-muted">
-            If you opened the link on another device, sign in again here or
-            request a new confirmation email below.
+            Open the link in this browser to continue. If you opened it on
+            another device, sign in here or request a new email below.
           </p>
-          <button
-            type="button"
-            onClick={handleResend}
-            disabled={
-              resending || !HCAPTCHA_SITE_KEY || captchaToken === null
-            }
-            className="ui-button ui-button-primary mt-5 w-full"
-          >
-            {resending ? "Sending…" : "Resend confirmation email"}
-          </button>
-          <button
-            type="button"
-            onClick={() => switchMode("sign-in")}
-            className="ui-button ui-button-secondary mt-2 w-full"
-          >
-            Back to sign in
-          </button>
         </div>
       ) : (
         <>
-          <label
-            htmlFor="email"
-            className="mb-1.5 block text-sm font-medium text-ink"
-          >
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="ui-field"
-          />
-
-          <label
-            htmlFor="password"
-            className="mb-1.5 mt-4 block text-sm font-medium text-ink"
-          >
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            required
-            minLength={8}
-            autoComplete={
-              mode === "sign-in" ? "current-password" : "new-password"
-            }
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="ui-field"
-          />
           {mode === "sign-up" && (
-            <p className="mt-2 text-xs leading-5 text-muted">
-              After confirming your email, you will provide your profile
-              details. By creating an account you agree to the{" "}
-              <Link
-                href="/terms"
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-accent underline underline-offset-2"
+            <div>
+              <label
+                htmlFor="full-name"
+                className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-ink-soft"
               >
-                Terms of Service
-              </Link>{" "}
-              and{" "}
-              <Link
-                href="/privacy"
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-accent underline underline-offset-2"
-              >
-                Privacy Notice
-              </Link>
-              .
-            </p>
+                Full name
+              </label>
+              <input
+                id="full-name"
+                type="text"
+                required
+                minLength={2}
+                maxLength={200}
+                autoComplete="name"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                aria-invalid={fieldErrors.fullName ? true : undefined}
+                aria-describedby={
+                  fieldErrors.fullName ? "full-name-error" : undefined
+                }
+                className="ui-field"
+              />
+              {fieldErrors.fullName && (
+                <p id="full-name-error" className="auth-field-error mt-1.5 text-xs">
+                  {fieldErrors.fullName}
+                </p>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label
+              htmlFor="email"
+              className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-ink-soft"
+            >
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              aria-invalid={fieldErrors.email ? true : undefined}
+              aria-describedby={
+                fieldErrors.email ? "email-error" : undefined
+              }
+              className="ui-field"
+            />
+            {fieldErrors.email && (
+              <p id="email-error" className="auth-field-error mt-1.5 text-xs">
+                {fieldErrors.email}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="password"
+              className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-ink-soft"
+            >
+              Password
+            </label>
+            <PasswordInput
+              id="password"
+              value={password}
+              onChange={setPassword}
+              autoComplete={
+                mode === "sign-in" ? "current-password" : "new-password"
+              }
+              minLength={mode === "sign-up" ? 8 : undefined}
+              invalid={Boolean(fieldErrors.password)}
+              describedBy={
+                fieldErrors.password ? "password-error" : undefined
+              }
+            />
+            {mode === "sign-up" && !fieldErrors.password && (
+              <p className="mt-1.5 text-[11px] text-muted">
+                At least 8 characters.
+              </p>
+            )}
+            {fieldErrors.password && (
+              <p id="password-error" className="auth-field-error mt-1.5 text-xs">
+                {fieldErrors.password}
+              </p>
+            )}
+          </div>
+
+          {mode === "sign-up" && (
+            <div>
+              <label className="flex items-start gap-2.5 text-xs leading-5 text-ink-soft">
+                <input
+                  type="checkbox"
+                  required
+                  checked={acceptedPolicies}
+                  onChange={(event) => setAcceptedPolicies(event.target.checked)}
+                  aria-invalid={fieldErrors.policies ? true : undefined}
+                  aria-describedby={
+                    fieldErrors.policies ? "policies-error" : undefined
+                  }
+                  className="mt-0.5 h-4 w-4 rounded border-line"
+                />
+                <span>
+                  I accept the{" "}
+                  <Link
+                    href="/terms"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-accent underline underline-offset-2"
+                  >
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link
+                    href="/privacy"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-accent underline underline-offset-2"
+                  >
+                    Privacy Notice
+                  </Link>
+                  .
+                </span>
+              </label>
+              {fieldErrors.policies && (
+                <p
+                  id="policies-error"
+                  className="auth-field-error mt-1.5 text-xs"
+                >
+                  {fieldErrors.policies}
+                </p>
+              )}
+            </div>
           )}
         </>
       )}
 
-      <div className="mt-5">
+      <div className="pt-1">
         {HCAPTCHA_SITE_KEY ? (
           <HCaptcha
             ref={captchaRef}
             sitekey={HCAPTCHA_SITE_KEY}
+            theme="dark"
             reCaptchaCompat={false}
             onVerify={(token) => {
               setCaptchaToken(token);
@@ -418,7 +545,7 @@ export function LoginForm() {
             }}
             onExpire={() => {
               setCaptchaToken(null);
-              setCaptchaError("CAPTCHA expired. Please verify again.");
+              setCaptchaError("CAPTCHA expired. Verify again to continue.");
             }}
             onError={() => {
               setCaptchaToken(null);
@@ -428,27 +555,26 @@ export function LoginForm() {
         ) : (
           <p
             role="alert"
-            className="border-l-2 border-danger bg-surface-muted px-3 py-2 text-sm text-ink-soft"
+            className="auth-message-error rounded-xl border px-3 py-2 text-xs"
           >
-            hCaptcha is not configured. Set{" "}
-            <code>NEXT_PUBLIC_HCAPTCHA_SITE_KEY</code> and rebuild the
-            frontend.
+            hCaptcha is not configured. Add NEXT_PUBLIC_HCAPTCHA_SITE_KEY and
+            rebuild the frontend.
           </p>
         )}
-        {captchaError !== null && (
-          <p role="alert" className="mt-2 text-xs text-danger">
+        {captchaError && (
+          <p role="alert" className="auth-field-error mt-2 text-xs">
             {captchaError}
           </p>
         )}
-        {HCAPTCHA_SITE_KEY && captchaToken === null && captchaError === null ? (
-          <p className="mt-2 text-xs text-muted">
+        {HCAPTCHA_SITE_KEY && captchaToken === null && !captchaError && (
+          <p className="mt-2 text-[11px] text-muted">
             {mode === "verify-email"
               ? "Complete the CAPTCHA to resend the confirmation email."
               : "Complete the CAPTCHA to continue."}
           </p>
-        ) : null}
-        <p className="mt-2 text-xs text-muted">
-          This site is protected by hCaptcha. See our{" "}
+        )}
+        <p className="mt-2 text-[11px] leading-5 text-muted">
+          Protected by hCaptcha. See our{" "}
           <Link
             href="/privacy"
             className="font-medium text-accent underline underline-offset-2"
@@ -459,28 +585,43 @@ export function LoginForm() {
         </p>
       </div>
 
-      {error !== null && (
-        <p
-          role="alert"
-          className="mt-4 border-l-2 border-danger bg-surface-muted px-3 py-2 text-sm text-ink-soft"
-        >
+      {error && (
+        <p role="alert" className="auth-message-error rounded-xl border px-3 py-2 text-sm">
           {error}
         </p>
       )}
-      {notice !== null && (
-        <p className="mt-4 border-l-2 border-success bg-surface-muted px-3 py-2 text-sm text-ink-soft">
+      {notice && (
+        <p className="auth-message-success rounded-xl border px-3 py-2 text-sm">
           {notice}
         </p>
       )}
 
-      {mode !== "verify-email" && (
+      {mode === "verify-email" ? (
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={handleResend}
+            disabled={resending || !HCAPTCHA_SITE_KEY || captchaToken === null}
+            className="ui-button ui-button-primary h-11 w-full"
+          >
+            {resending && <Spinner />}
+            {resending ? "Sending…" : "Resend confirmation email"}
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode("sign-in")}
+            className="ui-button ui-button-secondary h-11 w-full"
+          >
+            Back to sign in
+          </button>
+        </div>
+      ) : (
         <button
           type="submit"
-          disabled={
-            submitting || !HCAPTCHA_SITE_KEY || captchaToken === null
-          }
-          className="ui-button ui-button-primary mt-5 w-full"
+          disabled={submitting || !HCAPTCHA_SITE_KEY || captchaToken === null}
+          className="ui-button ui-button-primary h-11 w-full"
         >
+          {submitting && <Spinner />}
           {submitting
             ? "Please wait…"
             : mode === "sign-in"

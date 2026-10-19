@@ -1,12 +1,21 @@
 import { Suspense } from "react";
+import { AuthShell } from "../../components/auth/auth-shell";
+import { Spinner } from "../../components/auth/spinner";
 import { AuthCallbackView } from "./callback-view";
 
 export default function AuthCallbackPage() {
   return (
-    <main className="mx-auto w-full max-w-xl flex-1 px-4 py-12 sm:px-6">
-      <Suspense fallback={<p className="text-sm text-muted">Verifying…</p>}>
+    <AuthShell>
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center py-10 text-sm text-muted">
+            <Spinner className="mr-2" />
+            Verifying…
+          </div>
+        }
+      >
         <AuthCallbackView />
       </Suspense>
-    </main>
+    </AuthShell>
   );
 }

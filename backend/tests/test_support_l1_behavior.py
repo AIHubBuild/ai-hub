@@ -14,6 +14,8 @@ from app.domains.support_copilot.domain import wire_support_copilot
 from app.main import create_app
 from app.models import Base
 
+from tests.profile_test_helpers import seed_complete_profile
+
 TEST_SECRET = "test-jwt-secret-0123456789abcdef0123456789abcdef0123456789abcdef"
 USER_A = "550e8400-e29b-41d4-a716-446655440000"
 
@@ -51,6 +53,7 @@ def build_client(tmp_path, responses):
     )
     app: FastAPI = create_app(settings)
     Base.metadata.create_all(app.state.engine)
+    seed_complete_profile(app, USER_A)
     run_store = SQLAlchemyRunRecordStore(app.state.session_factory)
     ai_core = create_ai_core(run_store=run_store)
     ai_core.llm_factory.register_provider(settings.ai_provider_name, provider)

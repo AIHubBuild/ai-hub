@@ -47,6 +47,15 @@ export function SiteHeader() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [menuOpen]);
 
+  const isAuthRoute =
+    pathname === "/login" ||
+    pathname.startsWith("/register") ||
+    pathname.startsWith("/auth");
+
+  if (isAuthRoute) {
+    return null;
+  }
+
   const email = session?.user.email ?? "";
   const nav = (
     <ul className="flex flex-col gap-1 md:flex-row md:items-center md:gap-1">

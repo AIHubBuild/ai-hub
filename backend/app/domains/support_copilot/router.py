@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.ai_core import AICore, get_ai_core
-from app.core.access import require_verified_email
+from app.core.access import require_complete_profile
 from app.core.security import AuthUser
 from app.db.session import get_db
 from app.domains.support_copilot import service
@@ -68,7 +68,7 @@ def _is_uuid(value: str) -> bool:
 @router.post("/sessions", status_code=201, response_model=CreateSessionResponse)
 def create_support_session(
     session: Session = Depends(get_db),
-    user: AuthUser = Depends(require_verified_email),
+    user: AuthUser = Depends(require_complete_profile),
 ) -> CreateSessionResponse:
     created = service.create_session(session, user.id)
     return CreateSessionResponse(
@@ -87,7 +87,7 @@ def send_support_message(
     body: SendMessageRequest,
     session: Session = Depends(get_db),
     ai_core: AICore = Depends(get_ai_core),
-    user: AuthUser = Depends(require_verified_email),
+    user: AuthUser = Depends(require_complete_profile),
 ) -> SendMessageResponse:
     if not _is_uuid(session_id):
         raise _error(404, "Support session not found.")
@@ -118,7 +118,7 @@ def send_support_message(
 @router.get("/sessions", response_model=SessionListResponse)
 def list_support_sessions(
     session: Session = Depends(get_db),
-    user: AuthUser = Depends(require_verified_email),
+    user: AuthUser = Depends(require_complete_profile),
 ) -> SessionListResponse:
     sessions = service.list_sessions(session, user.id)
     return SessionListResponse(
@@ -141,7 +141,7 @@ def list_support_sessions(
 def get_support_session(
     session_id: str,
     session: Session = Depends(get_db),
-    user: AuthUser = Depends(require_verified_email),
+    user: AuthUser = Depends(require_complete_profile),
 ) -> SessionDetailResponse:
     if not _is_uuid(session_id):
         raise _error(404, "Support session not found.")
@@ -179,7 +179,7 @@ def get_support_session(
 @router.get("/tickets", response_model=TicketListResponse)
 def list_support_tickets(
     session: Session = Depends(get_db),
-    user: AuthUser = Depends(require_verified_email),
+    user: AuthUser = Depends(require_complete_profile),
 ) -> TicketListResponse:
     tickets = service.list_tickets(session, user.id)
     return TicketListResponse(

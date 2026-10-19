@@ -17,6 +17,8 @@ from app.models.admin import (
     UserAccountStatus,
 )
 
+from tests.profile_test_helpers import seed_complete_profile
+
 TEST_SECRET = "test-admin-secret-0123456789abcdef0123456789abcdef0123456789"
 ADMIN_ID = "550e8400-e29b-41d4-a716-446655440000"
 USER_ID = "660e8400-e29b-41d4-a716-446655440001"
@@ -45,6 +47,7 @@ def build_app(tmp_path) -> FastAPI:
         )
     )
     Base.metadata.create_all(app.state.engine)
+    seed_complete_profile(app, USER_ID)
     return app
 
 

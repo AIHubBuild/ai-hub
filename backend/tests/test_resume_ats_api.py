@@ -48,6 +48,8 @@ FAKE_RESPONSES = [
     "Tailored cover letter content.\nJane Doe",
 ]
 
+from tests.profile_test_helpers import seed_complete_profile
+
 TEST_SECRET = "test-jwt-secret-0123456789abcdef0123456789abcdef0123456789abcdef"
 
 USER_A = "550e8400-e29b-41d4-a716-446655440000"
@@ -107,6 +109,7 @@ def make_settings(tmp_path, **overrides) -> Settings:
 def build_app(tmp_path, settings: Settings) -> FastAPI:
     app = create_app(settings)
     Base.metadata.create_all(app.state.engine)
+    seed_complete_profile(app, USER_A, USER_B)
     return app
 
 
@@ -128,6 +131,7 @@ def install_fake_provider(app: FastAPI, provider: FakeProvider) -> None:
 @pytest.fixture
 def client(tmp_path):
     app = build_app(tmp_path, make_settings(tmp_path))
+    seed_complete_profile(app, USER_A, USER_B)
     install_fake_provider(app, FakeProvider(responses=list(FAKE_RESPONSES)))
     with TestClient(app) as test_client:
         yield test_client, app
@@ -161,6 +165,19 @@ def test_unverified_user_cannot_access_resume_ats(client):
 
     assert response.status_code == 403
     assert response.json()["message"] == "Email verification is required."
+
+
+def test_user_without_profile_cannot_access_resume_ats(client):
+    test_client, _ = client
+    unprofiled = "770e8400-e29b-41d4-a716-446655440099"
+
+    response = test_client.get(
+        "/api/v1/resumes/00000000-0000-0000-0000-000000000000",
+        headers=auth_headers(unprofiled),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["message"] == "Profile completion required."
 
 
 def test_upload_requires_authentication(client):
