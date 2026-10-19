@@ -8,7 +8,15 @@ export function getSupabase(): SupabaseClient | null {
   }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  cached = url && anonKey ? createClient(url, anonKey) : null;
+  cached =
+    url && anonKey
+      ? createClient(url, anonKey, {
+          auth: {
+            flowType: "pkce",
+            detectSessionInUrl: true,
+          },
+        })
+      : null;
   return cached;
 }
 

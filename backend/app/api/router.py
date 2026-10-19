@@ -5,6 +5,7 @@ from app.domains.admin.router import router as admin_router
 from app.domains.assistants import router as assistants_router
 from app.domains.resume_ats.router import analyses_router, router as resume_ats_router
 from app.domains.support_copilot.router import router as support_router
+from app.domains.user_profile.router import router as profile_router
 
 # Versioned API router. Future domain modules register their own
 # routers here (see docs/07_API_Design.md for endpoint standards).
@@ -13,6 +14,7 @@ api_router = APIRouter()
 api_router.include_router(health.router, tags=["system"])
 api_router.include_router(assistants_router.router, tags=["assistants"])
 api_router.include_router(admin_router)
+api_router.include_router(profile_router)
 api_router.include_router(resume_ats_router)
 api_router.include_router(analyses_router)
 api_router.include_router(support_router)

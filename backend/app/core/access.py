@@ -3,6 +3,7 @@
 import logging
 
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.audit import record_admin_audit_event
@@ -12,6 +13,7 @@ from app.models.admin import AdminUser, UserAccountStatus
 
 SUSPENDED_MESSAGE = "This account is suspended."
 ADMIN_REQUIRED_MESSAGE = "Administrator access required."
+VERIFICATION_REQUIRED_MESSAGE = "Email verification is required."
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,45 @@ def get_active_user(
     if account_status is not None and account_status.status == "suspended":
         raise _forbidden(SUSPENDED_MESSAGE)
     return user
+
+
+def require_verified_email(
+    user: AuthUser = Depends(get_active_user),
+    session: Session = Depends(get_db),
+) -> AuthUser:
+    """Return the active user only when their email is verified.
+
+    Supabase access tokens do not always carry an ``email_verified``
+    claim. On PostgreSQL, the authoritative confirmation state is read
+    from Supabase's ``auth.users.email_confirmed_at``. Local SQLite tests
+    use the signed JWT claim instead. Verification failures deny access
+    rather than assuming the address is verified.
+    """
+    if user.email_verified:
+        return user
+
+    if session.get_bind().dialect.name == "postgresql":
+        try:
+            confirmed_at = session.execute(
+                text(
+                    "SELECT email_confirmed_at FROM auth.users "
+                    "WHERE id = :user_id"
+                ),
+                {"user_id": user.id},
+            ).scalar_one_or_none()
+        except Exception as exc:
+            session.rollback()
+            logger.warning(
+                "email_verification_lookup_failed error_type=%s",
+                type(exc).__name__,
+            )
+            raise _forbidden(
+                VERIFICATION_REQUIRED_MESSAGE
+            ) from exc
+        if confirmed_at is not None:
+            return user.model_copy(update={"email_verified": True})
+
+    raise _forbidden(VERIFICATION_REQUIRED_MESSAGE)
 
 
 def _audit_denied_admin_access(

@@ -26,6 +26,7 @@ def make_token(user_id: str, email: str = "user@example.com") -> str:
     payload = {
         "sub": user_id,
         "email": email,
+        "email_verified": True,
         "exp": int(time.time()) + 3600,
     }
     return jwt.encode(payload, TEST_SECRET, algorithm="HS256")

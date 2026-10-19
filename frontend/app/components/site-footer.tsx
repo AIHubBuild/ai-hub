@@ -32,6 +32,12 @@ export function SiteFooter() {
           >
             IT Support
           </Link>
+          <Link href="/terms" className="transition-colors hover:text-ink">
+            Terms
+          </Link>
+          <Link href="/privacy" className="transition-colors hover:text-ink">
+            Privacy
+          </Link>
           <span className="hidden h-3 w-px bg-line sm:inline" />
           <span>Private to your account</span>
         </div>

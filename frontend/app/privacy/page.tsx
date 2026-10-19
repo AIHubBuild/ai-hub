@@ -18,8 +18,11 @@ export default function PrivacyPage() {
             Information we collect
           </h2>
           <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>Account email and authentication data managed by Supabase Auth.</li>
             <li>
-              Account email and authentication data managed by Supabase Auth.
+              Profile details you provide: full name, optional phone number,
+              optional country, optional city, optional career goal, and
+              marketing preference.
             </li>
             <li>
               Content you submit to Resume ATS and AI IT Support Copilot,
@@ -27,7 +30,7 @@ export default function PrivacyPage() {
             </li>
             <li>
               Operational metadata such as request status, latency, and error
-              category.
+              category. Passwords are never stored in your profile.
             </li>
             <li>
               Bot-protection signals processed by hCaptcha when you sign in or
@@ -42,8 +45,9 @@ export default function PrivacyPage() {
           </h2>
           <p className="mt-2">
             We use this information to create and secure your account, provide
-            the assistants you request, maintain reliability, and respond to
-            support issues.
+            the assistants you request, maintain reliability, respond to
+            support issues, and send marketing only when you have opted in.
+            Marketing consent is optional and separate from account messages.
           </p>
         </section>
 
@@ -56,7 +60,8 @@ export default function PrivacyPage() {
             provides AI processing for assistant workflows. hCaptcha provides
             bot-protection challenges on sign-in and sign-up and may process
             browser, device, and interaction signals for that purpose. We do
-            not sell personal information.
+            not sell personal information. We do not store payment card
+            details; any future paid plan must use a trusted payment provider.
           </p>
         </section>
 
@@ -65,10 +70,11 @@ export default function PrivacyPage() {
             Security and retention
           </h2>
           <p className="mt-2">
-            Access is restricted by account authentication. Data is retained
-            only as needed to operate the service, meet legal obligations, and
-            resolve disputes. Do not include secrets or unnecessary sensitive
-            information in resumes or support messages.
+            Access is restricted by account authentication and database
+            policies. Data is retained only as needed to operate the service,
+            meet legal obligations, and resolve disputes. Do not include
+            secrets or unnecessary sensitive information in resumes, support
+            messages, or profile fields.
           </p>
         </section>
 
@@ -77,8 +83,9 @@ export default function PrivacyPage() {
             Your choices
           </h2>
           <p className="mt-2">
-            You can request account or data deletion through the support
-            channel available in your account.
+            You can update profile information and marketing consent from your
+            Profile page. You can request account or data deletion through the
+            support channel available in your account.
           </p>
         </section>
 

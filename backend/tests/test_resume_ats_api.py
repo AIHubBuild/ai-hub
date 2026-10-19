@@ -69,17 +69,29 @@ class FakeProvider:
         return self.responses.pop(0)
 
 
-def make_token(user_id: str = USER_A, *, email: str = "alex@example.com") -> str:
+def make_token(
+    user_id: str = USER_A,
+    *,
+    email: str = "alex@example.com",
+    email_verified: bool = True,
+) -> str:
     payload = {
         "sub": user_id,
         "email": email,
+        "email_verified": email_verified,
         "exp": int(time.time()) + 3600,
     }
     return jwt.encode(payload, TEST_SECRET, algorithm="HS256")
 
 
-def auth_headers(user_id: str = USER_A) -> dict[str, str]:
-    return {"Authorization": f"Bearer {make_token(user_id)}"}
+def auth_headers(
+    user_id: str = USER_A, *, email_verified: bool = True
+) -> dict[str, str]:
+    return {
+        "Authorization": (
+            f"Bearer {make_token(user_id, email_verified=email_verified)}"
+        )
+    }
 
 
 def make_settings(tmp_path, **overrides) -> Settings:
@@ -137,6 +149,18 @@ def upload_resume(
 # ---------------------------------------------------------------
 # Authentication requirements
 # ---------------------------------------------------------------
+
+
+def test_unverified_user_cannot_access_resume_ats(client):
+    test_client, _ = client
+
+    response = test_client.get(
+        "/api/v1/resumes/00000000-0000-0000-0000-000000000000",
+        headers=auth_headers(email_verified=False),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["message"] == "Email verification is required."
 
 
 def test_upload_requires_authentication(client):

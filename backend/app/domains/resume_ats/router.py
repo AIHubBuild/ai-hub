@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.ai_core import AICore, get_ai_core
 from app.core.config import Settings, get_app_settings
-from app.core.access import get_active_user
+from app.core.access import require_verified_email
 from app.core.security import AuthUser
 from app.db.session import get_db
 from app.domains.resume_ats import service
@@ -93,7 +93,7 @@ def upload_resume(
     file: UploadFile = File(...),
     session: Session = Depends(get_db),
     settings: Settings = Depends(get_app_settings),
-    user: AuthUser = Depends(get_active_user),
+    user: AuthUser = Depends(require_verified_email),
 ) -> UploadResumeResponse:
     data = _read_upload(
         file, settings.max_upload_size_mb * 1024 * 1024
@@ -130,7 +130,7 @@ def upload_resume(
 def get_resume(
     resume_id: str,
     session: Session = Depends(get_db),
-    user: AuthUser = Depends(get_active_user),
+    user: AuthUser = Depends(require_verified_email),
 ) -> ResumeDetailResponse:
     if not _is_uuid(resume_id):
         raise _error(404, "Resume not found.")
@@ -167,7 +167,7 @@ def analyze_resume(
     body: AtsAnalysisApiRequest,
     session: Session = Depends(get_db),
     ai_core: AICore = Depends(get_ai_core),
-    user: AuthUser = Depends(get_active_user),
+    user: AuthUser = Depends(require_verified_email),
 ) -> AnalysisResponse:
     if not _is_uuid(resume_id):
         raise _error(404, "Resume not found.")
@@ -227,7 +227,7 @@ def analyze_resume(
 def download_cover_letter(
     analysis_id: str,
     session: Session = Depends(get_db),
-    user: AuthUser = Depends(get_active_user),
+    user: AuthUser = Depends(require_verified_email),
 ) -> Response:
     if not _is_uuid(analysis_id):
         raise _error(404, "Analysis not found.")
@@ -265,7 +265,7 @@ def download_cover_letter(
 def download_tailored_resume(
     analysis_id: str,
     session: Session = Depends(get_db),
-    user: AuthUser = Depends(get_active_user),
+    user: AuthUser = Depends(require_verified_email),
 ) -> Response:
     if not _is_uuid(analysis_id):
         raise _error(404, "Analysis not found.")

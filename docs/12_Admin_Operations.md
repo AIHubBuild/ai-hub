@@ -80,6 +80,7 @@ New additive migrations:
 0006_ai_usage_indexes
 0007_admin_incidents
 0008_user_entitlements
+0009_user_profiles
 ```
 
 They have not been applied to the long-lived local database or production.

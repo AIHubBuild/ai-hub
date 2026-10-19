@@ -106,6 +106,12 @@ export function SiteHeader() {
               >
                 {accountInitial(email)}
               </span>
+              <Link
+                href="/profile"
+                className="rounded-lg px-2 py-1.5 text-sm font-medium text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                Profile
+              </Link>
               <button
                 type="button"
                 onClick={() => signOut()}
@@ -155,13 +161,22 @@ export function SiteHeader() {
                   </p>
                   <p className="text-xs text-muted">Signed in</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => signOut()}
-                  className="ui-button ui-button-secondary"
-                >
-                  Sign out
-                </button>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href="/profile"
+                    onClick={() => setMenuOpen(false)}
+                    className="ui-button ui-button-secondary"
+                  >
+                    Profile
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => signOut()}
+                    className="ui-button ui-button-secondary"
+                  >
+                    Sign out
+                  </button>
+                </div>
               </div>
             ) : (
               <Link

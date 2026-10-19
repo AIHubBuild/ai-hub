@@ -30,14 +30,14 @@ def table_names(db_url: str) -> set[str]:
         return set(inspect(connection).get_table_names())
 
 
-def test_migration_graph_has_single_head_at_0008(tmp_path):
+def test_migration_graph_has_single_head_at_0009(tmp_path):
     cfg = make_alembic_config(
         tmp_path, f"sqlite:///{tmp_path / 'head.db'}"
     )
 
     script = ScriptDirectory.from_config(cfg)
 
-    assert script.get_heads() == ["0008"]
+    assert script.get_heads() == ["0009"]
 
 
 def test_alembic_rejects_sqlite_in_production(tmp_path, monkeypatch):
@@ -69,6 +69,12 @@ def test_postgresql_offline_upgrade_compiles(tmp_path, capsys):
     assert "CREATE TABLE admin_audit_events" in sql
     assert "CREATE TABLE admin_incidents" in sql
     assert "CREATE TABLE user_entitlements" in sql
+    assert "CREATE TABLE user_profiles" in sql
+    assert "user_profiles_select_own" in sql
+    assert "user_profiles_insert_own" not in sql
+    assert "user_profiles_update_own" not in sql
+    assert "REVOKE INSERT, UPDATE, DELETE" in sql
+    assert "GRANT SELECT ON TABLE user_profiles" in sql
     assert "ALTER TABLE admin_audit_events ADD COLUMN actor_user_id UUID" in sql
     assert "ALTER TABLE admin_audit_events ALTER COLUMN admin_user_id DROP NOT NULL" in sql
     assert "CREATE INDEX ix_ai_run_records_domain_created_at" in sql
@@ -100,14 +106,16 @@ def test_postgresql_offline_upgrade_accepts_percent_encoded_password(
     assert "CREATE TABLE ai_run_records" in sql
     assert "CREATE TABLE admin_incidents" in sql
     assert "CREATE TABLE user_entitlements" in sql
+    assert "CREATE TABLE user_profiles" in sql
 
 
 def test_postgresql_offline_downgrade_compiles(tmp_path, capsys):
     cfg = make_alembic_config(tmp_path, POSTGRES_TEST_URL)
 
-    command.downgrade(cfg, "0008:0003", sql=True)
+    command.downgrade(cfg, "0009:0003", sql=True)
 
     sql = capsys.readouterr().out
+    assert "DROP TABLE user_profiles" in sql
     assert "DROP TABLE user_entitlements" in sql
     assert "DROP TABLE admin_incidents" in sql
     assert "DROP COLUMN actor_is_admin" in sql
@@ -180,6 +188,7 @@ def test_admin_migration_is_additive_and_reversible(tmp_path):
     assert "admin_users" not in downgraded
     assert "user_account_status" not in downgraded
     assert "admin_audit_events" not in downgraded
+    assert "user_profiles" not in downgraded
     assert "ai_run_records" in downgraded
 
 
@@ -242,6 +251,45 @@ def test_incident_and_entitlement_migrations_are_additive_and_reversible(
     assert "admin_incidents" not in downgraded
     assert "user_entitlements" not in downgraded
     assert "admin_users" in downgraded
+
+
+def test_user_profile_migration_is_additive_and_reversible(tmp_path):
+    db_url = f"sqlite:///{tmp_path / 'user-profiles.db'}"
+    cfg = make_alembic_config(tmp_path, db_url)
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(db_url)
+    with engine.connect() as connection:
+        assert "user_profiles" in set(
+            inspect(connection).get_table_names()
+        )
+        columns = {
+            item["name"]
+            for item in inspect(connection).get_columns("user_profiles")
+        }
+        indexes = {
+            item["name"]
+            for item in inspect(connection).get_indexes("user_profiles")
+        }
+
+    assert {
+        "user_id",
+        "full_name",
+        "phone",
+        "country_code",
+        "city",
+        "career_goal",
+        "marketing_consent",
+        "terms_accepted_at",
+        "privacy_accepted_at",
+    } <= columns
+    assert "ix_user_profiles_updated_at" in indexes
+
+    command.downgrade(cfg, "0008")
+    tables = table_names(db_url)
+
+    assert "user_profiles" not in tables
+    assert "admin_users" in tables
 
 
 def test_new_admin_migrations_preserve_existing_records(tmp_path):
@@ -323,6 +371,7 @@ def test_new_admin_migrations_preserve_existing_records(tmp_path):
     tables = table_names(db_url)
     assert "admin_incidents" not in tables
     assert "user_entitlements" not in tables
+    assert "user_profiles" not in tables
 
     with session_factory() as session:
         preserved_run = session.get(AIRunRecord, run_id)

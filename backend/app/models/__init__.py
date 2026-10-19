@@ -21,6 +21,7 @@ from app.models.admin import (  # noqa: E402,F401
     UserAccountStatus,
     UserEntitlement,
 )
+from app.models.profile import UserProfile  # noqa: E402,F401
 from app.models.resume import AtsAnalysisRecord, Resume  # noqa: E402,F401
 from app.models.support import SupportSession, SupportTicket  # noqa: E402,F401
 
@@ -32,6 +33,7 @@ __all__ = [
     "AdminUser",
     "UserAccountStatus",
     "UserEntitlement",
+    "UserProfile",
     "Resume",
     "AtsAnalysisRecord",
     "SupportSession",

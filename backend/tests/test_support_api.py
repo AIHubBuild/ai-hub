@@ -41,17 +41,26 @@ class FakeProvider:
         return self.responses.pop(0)
 
 
-def make_token(user_id: str = USER_A) -> str:
+def make_token(
+    user_id: str = USER_A, *, email_verified: bool = True
+) -> str:
     payload = {
         "sub": user_id,
         "email": "alex@example.com",
+        "email_verified": email_verified,
         "exp": int(time.time()) + 3600,
     }
     return jwt.encode(payload, TEST_SECRET, algorithm="HS256")
 
 
-def auth_headers(user_id: str = USER_A) -> dict[str, str]:
-    return {"Authorization": f"Bearer {make_token(user_id)}"}
+def auth_headers(
+    user_id: str = USER_A, *, email_verified: bool = True
+) -> dict[str, str]:
+    return {
+        "Authorization": (
+            f"Bearer {make_token(user_id, email_verified=email_verified)}"
+        )
+    }
 
 
 def make_settings(tmp_path, **overrides) -> Settings:
@@ -111,6 +120,18 @@ def send_message(
 # ---------------------------------------------------------------
 # Authentication
 # ---------------------------------------------------------------
+
+
+def test_unverified_user_cannot_create_support_session(client):
+    test_client, _ = client
+
+    response = test_client.post(
+        "/api/v1/support/sessions",
+        headers=auth_headers(email_verified=False),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["message"] == "Email verification is required."
 
 
 def test_create_session_requires_authentication(client):

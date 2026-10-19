@@ -46,6 +46,7 @@ class AuthUser(BaseModel):
 
     id: str
     email: str | None = None
+    email_verified: bool = False
 
 
 def _auth_error(message: str) -> HTTPException:
@@ -173,4 +174,5 @@ def get_current_user(
     return AuthUser(
         id=sub,
         email=payload.get("email"),
+        email_verified=payload.get("email_verified") is True,
     )
