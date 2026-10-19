@@ -212,6 +212,43 @@ def test_uvicorn_handlers_use_redacting_formatter(logger_name):
     assert output.count("api_key=") == 1
 
 
+def test_uvicorn_custom_formatter_fields_are_preserved_and_redacted():
+    class LevelPrefixFormatter(logging.Formatter):
+        def format(self, record: logging.LogRecord) -> str:
+            record.levelprefix = "UVICORN"
+            return super().format(record)
+
+    stream = StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(
+        LevelPrefixFormatter("%(levelprefix)s %(message)s")
+    )
+
+    logger = logging.getLogger("uvicorn")
+    original_handlers = logger.handlers
+    original_propagate = logger.propagate
+    original_level = logger.level
+
+    try:
+        logger.handlers = [handler]
+        logger.propagate = False
+        logger.setLevel(logging.WARNING)
+
+        configure_logging(Settings(environment="test", debug=False, _env_file=None))
+        logger.warning("api_key=uvicorn-levelprefix-secret")
+
+        output = stream.getvalue()
+        assert len(logger.handlers) == 1
+    finally:
+        logger.handlers = original_handlers
+        logger.propagate = original_propagate
+        logger.setLevel(original_level)
+
+    assert "UVICORN" in output
+    assert "uvicorn-levelprefix-secret" not in output
+    assert "[REDACTED]" in output
+
+
 def test_unhandled_exception_is_enveloped_correlated_and_redacted(app, caplog):
     @app.get("/_test/unhandled-secret")
     def unhandled_secret():
