@@ -656,6 +656,193 @@ PROMPT_TEMPLATES.extend(
 )
 
 
+
+
+# ---------------------------------------------------------------
+# Permanent latest versions: full job-description analysis, evidence,
+# natural writing, and document formatting. Older versions remain
+# available for run-record traceability.
+# ---------------------------------------------------------------
+
+ATS_PERMANENT_RULES = (
+    "PERMANENT ATS AND DOCUMENT RULES:\n"
+    "- Analyse the complete supplied job description. Distinguish mandatory "
+    "requirements from preferred qualifications when the text supports "
+    "that distinction. If the description is incomplete, say so instead of "
+    "inventing missing requirements.\n"
+    "- Use only evidence present in the master resume. Never invent "
+    "experience, employers, job titles, dates, qualifications, language "
+    "levels, metrics, certifications, skills, tools, or responsibilities.\n"
+    "- Treat missing wording as unverified, not automatic proof that a "
+    "candidate lacks the skill. Do not treat similar wording as identical "
+    "when the evidence is only transferable.\n"
+    "- Use job-description terminology only where the verified resume "
+    "supports it. Do not keyword-stuff, repeat phrases for ATS effect, or "
+    "add skills merely because the vacancy asks for them.\n"
+    "- Write natural, specific professional language. Avoid generic AI "
+    "phrases, corporate buzzwords, exaggerated claims, repetitive bullet "
+    "openings, and formulaic identical sentences. Keep the candidate's "
+    "actual seniority and voice.\n"
+    "- Resume output must use conventional ATS-readable sections and plain "
+    "professional text. Use ordinary bullet points only where appropriate. "
+    "Do not use Markdown, decorative asterisks, emoji, icons, tables, "
+    "decorative separators, or artificial visual elements.\n"
+    "- Cover letters must be conventional professional paragraphs, not "
+    "bullet lists or headings. Do not invent recipient names, company "
+    "addresses, contact details, or application facts.\n"
+    "- Never claim an ATS score is an employer's ATS score, guarantee an "
+    "interview, or imply that the document is certain to pass screening.\n"
+)
+
+_ANALYSIS_V5_STYLE = (
+    "\n"
+    "TASK-SPECIFIC RULES:\n"
+    "- Review the complete role, not only a keyword list.\n"
+    "- Separate mandatory and preferred requirements where stated.\n"
+    "- Explain the strongest evidence and the most material gaps.\n"
+    "- Recommend honest projects, certifications, or learning only where "
+    "they would address a real gap. Do not recommend inventing experience.\n"
+    "- Return plain text, one recommendation per line. No scores, keywords, "
+    "Markdown, or explanations."
+)
+
+_TAILORED_RESUME_V6_STYLE = (
+    "\n"
+    "TASK-SPECIFIC RULES:\n"
+    "- Make the resume specific to the complete job description, including "
+    "responsibilities, tools, qualifications, language requirements, and "
+    "preferred criteria.\n"
+    "- Preserve every verified employer, job title, date, qualification, "
+    "language level, and achievement exactly. Do not add sections that are "
+    "not present in the source resume.\n"
+    "- Reorganise and reword existing evidence; do not add missing skills. "
+    "If the source does not support a requirement, leave it out rather than "
+    "inventing or padding it.\n"
+    "- Use conventional headings and ordinary resume bullets. Use simple "
+    "round bullets or Word list formatting in DOCX, never literal asterisks "
+    "or Markdown.\n"
+    "- Keep bullets concise and varied. Do not force every bullet to contain "
+    "a metric or an achievement."
+)
+
+_COVER_LETTER_V6_STYLE = (
+    "\n"
+    "TASK-SPECIFIC RULES:\n"
+    "- Write three or four conventional paragraphs, not bullets.\n"
+    "- Open with a specific reason the candidate fits this role, using "
+    "verified experience.\n"
+    "- Connect two or three verified strengths to the job's actual "
+    "requirements. Do not retell the whole resume.\n"
+    "- Use a natural, professional closing. Do not invent a recipient, "
+    "company address, contact detail, or follow-up commitment.\n"
+    "- Do not use Markdown, asterisks, headings, emoji, or decorative "
+    "formatting.\n"
+    "- Preserve the candidate's actual seniority, language levels, and "
+    "experience. Do not infer personality traits or motivation."
+)
+
+# Remove the legacy instruction that can be read as permission to add
+# unsupported keywords. New wording preserves the tailoring intent without
+# fabricating evidence.
+_CRITICAL_KEYWORDS_BLOCK = (
+    "CRITICAL REQUIREMENT:\n"
+    "The final generated resume MUST actively apply:\n"
+    "- missing keywords\n"
+    "- ATS recommendations\n"
+    "- recruiter optimization suggestions\n"
+    "- technical alignment improvements\n"
+)
+_SAFE_TAILORING_BLOCK = (
+    "CRITICAL REQUIREMENT:\n"
+    "The final generated resume must be tailored to the job description "
+    "using only evidence present in the master resume. Do not add missing "
+    "keywords, skills, or achievements when the source does not support "
+    "them.\n"
+)
+_IT_FOCUS_BLOCK = (
+    "- Focus heavily on: IT support, infrastructure, cloud, networking, "
+    "system administration, cybersecurity, DevOps, endpoint management, "
+    "Microsoft technologies\n"
+    "- Penalize missing core technologies appropriately\n"
+    "- Evaluate seniority realistically\n"
+)
+_GENERIC_FOCUS_BLOCK = (
+    "- Use the job description's industry, role, and requirements. Do not "
+    "assume an IT role.\n"
+    "- Prefer mandatory requirements over preferred qualifications.\n"
+    "- Evaluate seniority from the supplied evidence.\n"
+)
+_TECH_PRIORITIES_BLOCK = (
+    "TECHNOLOGY PRIORITIES:\n"
+    "Microsoft 365, Entra ID, Active Directory, Windows Administration, "
+    "Networking, DNS, DHCP, VPN, Cloud platforms, Docker, Kubernetes, "
+    "Linux, IT support, Endpoint management, Security tooling, System "
+    "administration, Azure, Intune, SCCM, ITIL, VMware, PowerShell.\n"
+)
+_JOB_PRIORITIES_BLOCK = (
+    "JOB-SPECIFIC PRIORITIES:\n"
+    "Use the tools, platforms, responsibilities, qualifications, and "
+    "language requirements actually named in the supplied job description. "
+    "Do not copy unrelated technologies or assume a particular industry.\n"
+)
+
+_analysis_v5_user = ATS_ANALYSIS_TEMPLATE_V4.user_template.replace(
+    _IT_FOCUS_BLOCK, _GENERIC_FOCUS_BLOCK
+) + "\n\n" + ATS_PERMANENT_RULES + _ANALYSIS_V5_STYLE
+_tailored_v6_user = TAILORED_RESUME_TEMPLATE_V5.user_template.replace(
+    _CRITICAL_KEYWORDS_BLOCK, _SAFE_TAILORING_BLOCK
+).replace(
+    _TECH_PRIORITIES_BLOCK, _JOB_PRIORITIES_BLOCK
+).replace(
+    "Maintain realistic junior-level positioning",
+    "Preserve the candidate's actual seniority and experience level",
+) + "\n\n" + ATS_PERMANENT_RULES + _TAILORED_RESUME_V6_STYLE
+_cover_v6_user = COVER_LETTER_TEMPLATE_V5.user_template.replace(
+    "Maintain realistic junior-level positioning",
+    "Preserve the candidate's actual seniority and experience level",
+) + "\n\n" + ATS_PERMANENT_RULES + _COVER_LETTER_V6_STYLE
+
+ATS_ANALYSIS_TEMPLATE_V5 = PromptTemplate(
+    prompt_id="resume_ats/ats_analysis",
+    version=5,
+    system=(
+        "You are a pragmatic recruiter and job-match analyst. You assess "
+        "candidates against the actual role, across industries, without "
+        "inflating evidence."
+    ),
+    user_template=_analysis_v5_user,
+)
+
+TAILORED_RESUME_TEMPLATE_V6 = PromptTemplate(
+    prompt_id="resume_ats/tailored_resume",
+    version=6,
+    system=(
+        "You are a professional resume editor. You tailor verified candidate "
+        "evidence to a role, across industries, without inventing facts."
+    ),
+    user_template=_tailored_v6_user,
+)
+
+COVER_LETTER_TEMPLATE_V6 = PromptTemplate(
+    prompt_id="resume_ats/cover_letter",
+    version=6,
+    system=(
+        "You are a professional cover-letter editor. You write concise, "
+        "specific letters from verified candidate evidence, across "
+        "industries, without inventing facts."
+    ),
+    user_template=_cover_v6_user,
+)
+
+PROMPT_TEMPLATES.extend(
+    [
+        ATS_ANALYSIS_TEMPLATE_V5,
+        TAILORED_RESUME_TEMPLATE_V6,
+        COVER_LETTER_TEMPLATE_V6,
+    ]
+)
+
+
 def register_prompts(registry: PromptRegistry) -> None:
     """Register the Resume ATS prompt assets into the shared registry.
 

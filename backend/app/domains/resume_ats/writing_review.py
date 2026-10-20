@@ -340,6 +340,42 @@ def _check_unsupported_metrics(
             )
 
 
+MARKDOWN_ARTIFACT_PATTERN = re.compile(
+    r"\*\*|__|^#{1,6}\s|^\s*(?:---+|___+)\s*$",
+    flags=re.MULTILINE,
+)
+COVER_LETTER_BULLET_PATTERN = re.compile(
+    r"^\s*[-*•]\s+", flags=re.MULTILINE
+)
+
+
+def _check_formatting_artifacts(
+    doc_name: str, text: str, issues: list
+) -> None:
+    match = MARKDOWN_ARTIFACT_PATTERN.search(text)
+    if match:
+        issues.append(
+            WritingIssue(
+                code="markdown_artifact",
+                message=(
+                    f"{doc_name}: Markdown or decorative formatting "
+                    f"'{match.group(0).strip()}' found; use plain professional "
+                    "document formatting."
+                ),
+            )
+        )
+    if doc_name == "Cover letter" and COVER_LETTER_BULLET_PATTERN.search(text):
+        issues.append(
+            WritingIssue(
+                code="cover_letter_bullets",
+                message=(
+                    "Cover letter: bullet-list formatting found; use "
+                    "professional paragraphs instead."
+                ),
+            )
+        )
+
+
 PLACEHOLDER_PATTERN = re.compile(
     r"\[(?:name|email|phone|address|company|linkedin|github)\]|"
     r"\b(?:TBD|TODO|Lorem ipsum)\b",
@@ -444,6 +480,7 @@ def review_writing(
             continue
         _check_generic_phrases(doc_name, text, issues)
         _check_em_dashes(doc_name, text, issues)
+        _check_formatting_artifacts(doc_name, text, issues)
         _check_placeholders(doc_name, text, issues)
         _check_unsupported_claims(doc_name, text, resume_source, issues)
         _check_unsupported_sections(doc_name, text, resume_source, issues)
