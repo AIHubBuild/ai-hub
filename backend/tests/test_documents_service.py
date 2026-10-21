@@ -193,3 +193,27 @@ def test_cover_letter_docx_handles_empty_text():
     content = documents.build_cover_letter_docx("")
 
     assert content.startswith(b"PK")
+
+
+def test_docx_formatting_removes_markdown_and_uses_standard_bullets():
+    from docx import Document as DocxDocument
+    from io import BytesIO
+
+    from app.services.documents import build_tailored_resume_docx
+
+    content = build_tailored_resume_docx(
+        "Jane Doe\n"
+        "**Professional Summary**\n"
+        "IT support specialist.\n"
+        "Skills\n"
+        "- Active Directory\n"
+        "- Microsoft 365\n"
+        "---\n"
+    )
+    document = DocxDocument(BytesIO(content))
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+
+    assert "**" not in text
+    assert "---" not in text
+    assert "Active Directory" in text
+    assert "List Bullet" in {paragraph.style.name for paragraph in document.paragraphs}

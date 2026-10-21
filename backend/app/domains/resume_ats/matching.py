@@ -122,8 +122,65 @@ SYNONYMS: dict[str, list[str]] = {
     "dhcp": ["dynamic host configuration protocol"],
     "tcp/ip": ["tcp ip"],
     "sla": ["service level agreement"],
-    "technical support": ["help desk", "helpdesk", "it support"],
+    "technical support": ["help desk", "helpdesk", "it support", "service desk"],
+    "incident management": [
+        "incident handling",
+        "incident resolution",
+        "ticket management",
+        "ticket handling",
+    ],
+    "endpoint management": ["device management", "endpoint administration"],
+    "user provisioning": ["account provisioning", "user onboarding"],
 }
+
+LANGUAGE_LEVELS = {
+    "a1": 1,
+    "a2": 2,
+    "b1": 3,
+    "b2": 4,
+    "c1": 5,
+    "c2": 6,
+    "basic": 2,
+    "conversational": 3,
+    "intermediate": 3,
+    "business": 4,
+    "advanced": 5,
+    "proficient": 5,
+    "fluent": 5,
+    "native": 6,
+}
+_LANGUAGE_NAMES = (
+    "english",
+    "german",
+    "french",
+    "spanish",
+    "italian",
+    "dutch",
+    "portuguese",
+    "polish",
+    "czech",
+    "swedish",
+    "danish",
+    "norwegian",
+    "finnish",
+    "turkish",
+    "arabic",
+    "mandarin",
+    "chinese",
+)
+_LANGUAGE_LEVEL_RE = re.compile(
+    r"\b(" + "|".join(_LANGUAGE_NAMES) + r")\b"
+    r"[^\n]{0,40}?\b(" + "|".join(LANGUAGE_LEVELS) + r")\b",
+    re.IGNORECASE,
+)
+_LEVEL_LANGUAGE_RE = re.compile(
+    r"\b(" + "|".join(LANGUAGE_LEVELS) + r")\b"
+    r"[^\n]{0,20}?\b(" + "|".join(_LANGUAGE_NAMES) + r")\b",
+    re.IGNORECASE,
+)
+_LANGUAGE_ONLY_RE = re.compile(
+    r"\b(" + "|".join(_LANGUAGE_NAMES) + r")\b", re.IGNORECASE
+)
 
 MAX_EVIDENCE_LINES = 3
 EVIDENCE_LINE_LENGTH = 220
@@ -369,6 +426,8 @@ def _is_requirement_like(raw_line: str, text: str) -> bool:
         return False
     if _keywords_in(text):
         return True
+    if _LANGUAGE_LEVEL_RE.search(text) or _LEVEL_LANGUAGE_RE.search(text):
+        return True
     return _REQUIREMENT_CUE_RE.search(text) is not None
 
 
@@ -426,7 +485,7 @@ def _extract_requirements(job_description: str) -> list[Requirement]:
                 continue
             if section == "essential" and not _is_requirement_like(raw_line, text):
                 continue
-            key = text.lower()
+            key = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
             if key in seen:
                 continue
             seen.add(key)
@@ -606,6 +665,41 @@ def _keyword_coverage(
     return exact, partial, missing
 
 
+def _language_requirement(text: str) -> tuple[str, int | None] | None:
+    """Return (language, required level rank) for a language requirement."""
+    match = _LANGUAGE_LEVEL_RE.search(text)
+    if match:
+        return match.group(1).lower(), LANGUAGE_LEVELS[match.group(2).lower()]
+    match = _LEVEL_LANGUAGE_RE.search(text)
+    if match:
+        return match.group(2).lower(), LANGUAGE_LEVELS[match.group(1).lower()]
+    match = _LANGUAGE_ONLY_RE.search(text)
+    if match:
+        return match.group(1).lower(), None
+    return None
+
+
+def _resume_language_level(resume_text: str, language: str) -> int | None:
+    """Return the highest explicitly stated level for a language, if any."""
+    levels: list[int] = []
+    for match in _LANGUAGE_LEVEL_RE.finditer(resume_text):
+        if match.group(1).lower() == language:
+            levels.append(LANGUAGE_LEVELS[match.group(2).lower()])
+    for match in _LEVEL_LANGUAGE_RE.finditer(resume_text):
+        if match.group(2).lower() == language:
+            levels.append(LANGUAGE_LEVELS[match.group(1).lower()])
+    return max(levels) if levels else None
+
+
+def _has_skill_context(evidence: list[str]) -> bool:
+    return any(
+        _EXPERIENCE_CONTEXT_RE.search(line)
+        or _OUTCOME_RE.search(line)
+        or _ACTION_RE.search(line)
+        for line in evidence
+    )
+
+
 def _evaluate_requirement(
     requirement: Requirement,
     resume_text: str,
@@ -614,6 +708,37 @@ def _evaluate_requirement(
     keywords = requirement.keywords
     evidence = _evidence_lines(resume_text, keywords, requirement.text)
     lowered_resume = resume_text.lower()
+
+    language_requirement = _language_requirement(requirement.text)
+    if language_requirement is not None:
+        language, required_level = language_requirement
+        if required_level is None:
+            return (
+                UNVERIFIED,
+                evidence,
+                f"The job mentions {language.title()} but does not state a "
+                "required level.",
+            )
+        candidate_level = _resume_language_level(resume_text, language)
+        if candidate_level is None:
+            return (
+                UNVERIFIED,
+                evidence,
+                f"The candidate's {language.title()} level is not "
+                "explicitly stated.",
+            )
+        if candidate_level >= required_level:
+            return (
+                MATCHED,
+                evidence,
+                f"Stated {language.title()} level meets the requirement.",
+            )
+        return (
+            MISSING,
+            evidence,
+            f"The candidate's stated {language.title()} level is below the "
+            "level requested.",
+        )
 
     exact_terms, partial_terms, missing_keywords = _keyword_coverage(
         keywords, lowered_resume
@@ -653,7 +778,14 @@ def _evaluate_requirement(
                 ),
             )
         if exact:
-            return MATCHED, evidence, "All required skills appear in the resume."
+            if action or _has_skill_context(evidence):
+                return MATCHED, evidence, "All required skills appear with work context."
+            return (
+                UNVERIFIED,
+                evidence,
+                "The skill terms appear, but the resume does not show work "
+                "context for them.",
+            )
         return MISSING, evidence, "No required skill evidence found."
 
     if requirement.dimension == "experience":

@@ -28,9 +28,9 @@ def test_registers_exactly_the_three_workflow_templates():
 
     assert {t.prompt_id for t in PROMPT_TEMPLATES} == EXPECTED_PROMPT_IDS
     latest_versions = {
-        "resume_ats/ats_analysis": 4,
-        "resume_ats/tailored_resume": 5,
-        "resume_ats/cover_letter": 5,
+        "resume_ats/ats_analysis": 5,
+        "resume_ats/tailored_resume": 6,
+        "resume_ats/cover_letter": 6,
     }
     for prompt_id in EXPECTED_PROMPT_IDS:
         assert registry.get(prompt_id).version == latest_versions[prompt_id]
@@ -49,8 +49,8 @@ def test_latest_version_keeps_original_content_and_adds_accuracy_rules():
 
     latest = registry.get("resume_ats/ats_analysis")
 
-    assert latest.version == 4
-    assert ATS_ANALYSIS_TEMPLATE.user_template in latest.user_template
+    assert latest.version == 5
+    assert "Your task is to evaluate a candidate resume against a target job" in latest.user_template
     assert "{partial_keywords}" in latest.user_template
     assert "{requirement_evidence}" in latest.user_template
     assert "never inventing or exaggerating experience" in latest.user_template
@@ -60,10 +60,11 @@ def test_latest_version_keeps_original_content_and_adds_accuracy_rules():
 def test_registering_a_new_version_does_not_replace_the_old():
     registry = make_registered_registry()
     registry.register(
-        ATS_ANALYSIS_TEMPLATE.model_copy(update={"version": 5})
+        ATS_ANALYSIS_TEMPLATE.model_copy(update={"version": 6})
     )
 
-    assert registry.get("resume_ats/ats_analysis").version == 5
+    assert registry.get("resume_ats/ats_analysis").version == 6
+    assert registry.get("resume_ats/ats_analysis", version=5).version == 5
     assert registry.get("resume_ats/ats_analysis", version=4).version == 4
     assert registry.get("resume_ats/ats_analysis", version=3).version == 3
     assert registry.get("resume_ats/ats_analysis", version=2).version == 2
@@ -164,7 +165,7 @@ def test_cover_letter_v3_adds_natural_writing_rules():
 def test_latest_tailored_resume_forbids_inventing_facts_and_metrics():
     template = make_registered_registry().get("resume_ats/tailored_resume")
 
-    assert template.version == 5
+    assert template.version == 6
     rules = template.user_template
     assert "Preserve the exact employers, job titles, and dates" in rules
     assert "never add experience, metrics, certifications, employers" in rules
@@ -178,7 +179,7 @@ def test_latest_tailored_resume_forbids_inventing_facts_and_metrics():
 def test_latest_cover_letter_forbids_new_claims_and_exaggeration():
     template = make_registered_registry().get("resume_ats/cover_letter")
 
-    assert template.version == 5
+    assert template.version == 6
     rules = template.user_template
     assert "Do not introduce new claims, achievements, or employers" in rules
     assert "If a job requirement is not supported by the optimized resume" in rules
@@ -190,7 +191,7 @@ def test_latest_cover_letter_forbids_new_claims_and_exaggeration():
 def test_latest_analysis_prompt_requires_truthful_keyword_guidance():
     template = make_registered_registry().get("resume_ats/ats_analysis")
 
-    assert template.version == 4
+    assert template.version == 5
     rules = template.user_template
     assert "Do not claim evidence that is not there" in rules
     assert "never inventing or exaggerating experience" in rules
@@ -262,10 +263,26 @@ def test_app_factory_registers_resume_ats_prompts():
     registry = app.state.ai_core.prompts
 
     latest_versions = {
-        "resume_ats/ats_analysis": 4,
-        "resume_ats/tailored_resume": 5,
-        "resume_ats/cover_letter": 5,
+        "resume_ats/ats_analysis": 5,
+        "resume_ats/tailored_resume": 6,
+        "resume_ats/cover_letter": 6,
     }
     for prompt_id in EXPECTED_PROMPT_IDS:
         assert registry.get(prompt_id).version == latest_versions[prompt_id]
         assert registry.get(prompt_id, version=1).version == 1
+
+
+def test_latest_prompts_remove_unsafe_keyword_injection_and_it_only_rules():
+    registry = make_registered_registry()
+    for prompt_id in (
+        "resume_ats/ats_analysis",
+        "resume_ats/tailored_resume",
+        "resume_ats/cover_letter",
+    ):
+        template = registry.get(prompt_id)
+        assert "PERMANENT ATS AND DOCUMENT RULES" in template.user_template
+        assert "MUST actively apply" not in template.user_template
+        assert "IT support, infrastructure" not in template.user_template
+        assert "junior-level positioning" not in template.user_template
+        assert "Markdown" in template.user_template
+        assert "Do not invent" in template.user_template

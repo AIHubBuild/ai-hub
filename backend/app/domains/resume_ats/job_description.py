@@ -72,6 +72,20 @@ _LINE_REGEXES = [
 MIN_CLEANED_LENGTH = 60
 MIN_CONTENT_RATIO = 0.3
 
+_CLOSING_LINE_RE = re.compile(
+    r"^(?:we look forward|we are excited|thank you|thanks for|"
+    r"only shortlisted|we will be in touch|we will contact|"
+    r"if you have any questions|questions about|apply now|"
+    r"contact us|best regards|kind regards|sincerely)\b",
+    re.IGNORECASE,
+)
+_REQUIREMENT_CUE_RE = re.compile(
+    r"\b(?:ability|requirements?|responsibilities|experience|skills?|"
+    r"qualifications?|knowledge|proficient|experience with|years?|"
+    r"degree|certification|language|fluent|native|A1|A2|B1|B2|C1|C2)\b",
+    re.IGNORECASE,
+)
+
 
 def strip_boilerplate(job_description: str) -> str:
     """Remove website boilerplate lines and blocks from `job_description`."""
@@ -103,15 +117,47 @@ def is_suspiciously_thin(job_description: str, cleaned: str) -> bool:
     return len(cleaned) / original_len < MIN_CONTENT_RATIO
 
 
+def _looks_like_closing_only(cleaned: str) -> bool:
+    lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
+    if not lines:
+        return False
+    closing = sum(1 for line in lines if _CLOSING_LINE_RE.search(line))
+    return closing / len(lines) >= 0.7
+
+
+def _has_requirement_content(cleaned: str) -> bool:
+    sections = extract_sections(cleaned)
+    for lines in sections.values():
+        if any(
+            _REQUIREMENT_CUE_RE.search(line)
+            or line.lstrip().startswith(("-", "*", "•", "▸", "·"))
+            for line in lines
+        ):
+            return True
+    return False
+
+
 def describe_warning(job_description: str, cleaned: str) -> str | None:
-    """Human-readable warning when the extracted description looks thin."""
-    if not is_suspiciously_thin(job_description, cleaned):
-        return None
-    return (
-        "The job description appears to be very short or mostly website "
-        "boilerplate. Treat the estimated job-match score as indicative "
-        "only, and paste a fuller description for a more reliable result."
-    )
+    """Human-readable warning when the description is incomplete."""
+    if is_suspiciously_thin(job_description, cleaned):
+        return (
+            "The job description appears to be very short or mostly website "
+            "boilerplate. Treat the estimated job-match score as indicative "
+            "only, and paste a fuller description for a more reliable result."
+        )
+    if _looks_like_closing_only(cleaned):
+        return (
+            "The supplied text looks like a closing paragraph rather than a "
+            "complete job advert. The assessment may be unreliable; please "
+            "paste the role responsibilities and requirements."
+        )
+    if not _has_requirement_content(cleaned):
+        return (
+            "The supplied text does not appear to contain enough role "
+            "requirements to produce a reliable assessment. Please paste the "
+            "full job advert."
+        )
+    return None
 
 
 # ---------------------------------------------------------------

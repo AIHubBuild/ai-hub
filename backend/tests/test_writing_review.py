@@ -268,3 +268,23 @@ def test_empty_documents_produce_no_issues():
 
     assert review.passed is True
     assert review.issues == []
+
+
+def test_markdown_artifacts_are_flagged():
+    review = review_writing(
+        "Jane Doe",
+        "Jane Doe\n**Skills**\n- Active Directory",
+        None,
+    )
+
+    assert any(issue.code == "markdown_artifact" for issue in review.issues)
+
+
+def test_cover_letter_bullets_are_flagged():
+    review = review_writing(
+        "Jane Doe",
+        None,
+        "Dear Hiring Manager,\n- Active Directory experience\n- VPN support",
+    )
+
+    assert any(issue.code == "cover_letter_bullets" for issue in review.issues)
