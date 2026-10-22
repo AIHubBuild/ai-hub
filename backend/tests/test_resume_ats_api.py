@@ -42,10 +42,50 @@ JOB_DESCRIPTION = (
     "Intune experience."
 )
 
+API_COVER = (
+    "Dear Hiring Team,\n"
+    "I am interested in this support role because it focuses on the "
+    "systems I work with every day. I support users across Active "
+    "Directory, Microsoft 365, and VPN connections, and I enjoy helping "
+    "people get back to work with clear explanations.\n"
+    "\n"
+    "My professional experience is hands-on user support. I administer "
+    "accounts and Microsoft 365 services, troubleshoot access and "
+    "connectivity problems, and document the steps that solved each "
+    "issue. I also work with network troubleshooting, which helps me "
+    "narrow down whether a problem sits with the account, the device, or "
+    "the connection.\n"
+    "\n"
+    "I have used PowerShell for small administrative tasks and I am "
+    "comfortable learning a new tool when the role requires it. I have "
+    "not yet used Intune professionally, but my Microsoft 365 and "
+    "endpoint support experience gives me a practical starting point.\n"
+    "\n"
+    "What I bring to this position is a careful support approach. I ask "
+    "clear questions, test the obvious causes first, and keep notes so "
+    "colleagues can follow the same steps. I would welcome the "
+    "opportunity to discuss how my experience fits the team.\n"
+    "I work through problems in a structured way. I check the account, the "
+    "device, and the network, then document what solved the issue so the "
+    "next person can follow the same steps. I ask clear questions when a "
+    "user describes a problem, and I explain the fix in plain language. I "
+    "am comfortable working with a ticket queue and with colleagues who "
+    "have deeper specialist knowledge. I also make time to learn new tools "
+    "through documentation and practice, and I ask for help when a problem "
+    "is outside my experience. I keep users updated while I work and "
+    "confirm that the fix has actually solved their problem before I close "
+    "a ticket. I would bring the same careful approach to this role and to "
+    "your users.\n"
+    "\n"
+    "\n"
+    "Sincerely,\n"
+    "Jane Doe\n"
+)
+
 FAKE_RESPONSES = [
     "Add PowerShell automation projects and lab exposure.",
     "Jane Doe\nTailored resume content.",
-    "Tailored cover letter content.\nJane Doe",
+    API_COVER,
 ]
 
 from tests.profile_test_helpers import seed_complete_profile
@@ -387,7 +427,7 @@ def test_analysis_runs_workflow_and_returns_six_sections(client):
     assert set(data["missing_keywords"]) == {"powershell", "intune"}
     assert data["improvement_suggestions"] == FAKE_RESPONSES[0]
     assert data["tailored_resume"] == FAKE_RESPONSES[1]
-    assert data["cover_letter"] == FAKE_RESPONSES[2]
+    assert data["cover_letter"] == FAKE_RESPONSES[2].strip()
     assert data["run_id"]
 
 
@@ -863,7 +903,7 @@ def test_download_cover_letter_docx(client):
 
     parsed = DocxDocument(BytesIO(response.content))
     paragraphs = [p.text for p in parsed.paragraphs if p.text.strip()]
-    assert "Tailored cover letter content." in paragraphs
+    assert any("Dear Hiring Team" in p for p in paragraphs)
 
 
 def test_download_cover_letter_does_not_regenerate_or_reanalyze(client):

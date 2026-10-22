@@ -300,3 +300,66 @@ def test_empty_inputs_score_zero_without_inventing_requirements():
     assert empty.requirements == []
     assert no_resume.estimated_score == 0
     assert all(r.status == MISSING for r in no_resume.requirements)
+
+
+def test_skill_list_without_work_context_is_unverified():
+    resume = "Jane Doe\nSkills: Active Directory, Microsoft 365, VPN.\n"
+    jd = (
+        "Requirements:\n"
+        "- Active Directory administration\n"
+        "- Microsoft 365 administration\n"
+    )
+
+    analysis = analyze_job_match(resume, jd, reference_year=REFERENCE_YEAR)
+    by_term = {term.term: term for term in analysis.terms}
+
+    assert by_term["active directory"].status == UNVERIFIED
+    assert by_term["microsoft 365"].status == UNVERIFIED
+    assert analysis.estimated_score < 70
+
+
+def test_language_requirement_compares_explicit_levels():
+    jd = "Requirements:\n- German B2\n"
+
+    meets = analyze_job_match(
+        "Jane Doe\nGerman B2.\n", jd, reference_year=REFERENCE_YEAR
+    )
+    below = analyze_job_match(
+        "Jane Doe\nGerman B1.\n", jd, reference_year=REFERENCE_YEAR
+    )
+    unclear = analyze_job_match(
+        "Jane Doe\nGerman.\n", jd, reference_year=REFERENCE_YEAR
+    )
+
+    assert meets.requirements[0].status == MATCHED
+    assert below.requirements[0].status == MISSING
+    assert "below" in below.requirements[0].detail.lower()
+    assert unclear.requirements[0].status == UNVERIFIED
+    assert "not explicitly stated" in unclear.requirements[0].detail.lower()
+
+
+def test_language_requirement_without_job_level_is_unverified():
+    analysis = analyze_job_match(
+        "Jane Doe\nEnglish C1.\n",
+        "Requirements:\n- English\n",
+        reference_year=REFERENCE_YEAR,
+    )
+
+    assert analysis.requirements[0].status == UNVERIFIED
+    assert "does not state a required level" in analysis.requirements[0].detail.lower()
+
+
+def test_duplicate_requirement_lines_are_deduplicated():
+    jd = (
+        "Requirements:\n"
+        "- Active Directory administration\n"
+        "- Active Directory administration.\n"
+    )
+
+    analysis = analyze_job_match(
+        "Jane Doe\nAdministered Active Directory.\n",
+        jd,
+        reference_year=REFERENCE_YEAR,
+    )
+
+    assert len(analysis.requirements) == 1

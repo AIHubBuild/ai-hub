@@ -152,7 +152,10 @@ def run_ats_analysis(
 
     result = result_from_state(run.output_state)
     review = review_writing(
-        resume.extracted_text, result.tailored_resume, result.cover_letter
+        resume.extracted_text,
+        result.tailored_resume,
+        result.cover_letter,
+        job_description=job_description,
     )
     result.writing_review = WritingReviewSchema(
         passed=review.passed,

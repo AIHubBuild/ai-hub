@@ -33,6 +33,69 @@ JOB = (
     "- 3+ years in an IT support role\n"
 )
 
+LONG_CLEAN_COVER = (
+    "Dear Hiring Manager,\n"
+    "I am interested in this IT support role because it focuses on Active "
+    "Directory, Microsoft 365, and VPN support, which are the systems I "
+    "work with at Acme GmbH. I have supported 400 users and automated user "
+    "provisioning with PowerShell during onboarding.\n"
+    "\n"
+    "In my current role I support staff directly, resolve access and "
+    "connectivity problems, and document the steps that solved each issue. "
+    "That work taught me to check the account, the device, and the network "
+    "in a sensible order, and to explain the outcome without jargon. I also "
+    "keep notes on recurring problems so colleagues can follow the same "
+    "steps.\n"
+    "I work through problems in a structured way. I check the account, the "
+    "device, and the network, then document what solved the issue so the "
+    "next person can follow the same steps. I ask clear questions when a "
+    "user describes a problem, and I explain the fix in plain language. I "
+    "am comfortable working with a ticket queue and with colleagues who "
+    "have deeper specialist knowledge. I also make time to learn new tools "
+    "through documentation and practice, and I ask for help when a problem "
+    "is outside my experience. I keep users updated while I work and "
+    "confirm that the fix has actually solved their problem before I close "
+    "a ticket. I would bring the same careful approach to this role and to "
+    "your users.\n"
+    "\n"
+    "\n"
+    "I am comfortable working through a ticket queue, asking clear "
+    "questions, and escalating when a problem needs more specialist help. "
+    "I like working in a team where support requests are handled "
+    "consistently and users know what to expect. I keep learning new tools "
+    "through documentation and practice, and I ask for help when a problem "
+    "is outside my experience. I would welcome the opportunity to discuss "
+    "how my experience with Active Directory, Microsoft 365, and user "
+    "support fits the team.\n"
+    "\n"
+    "Sincerely,\n"
+    "Jane Doe\n"
+)
+
+LONG_ISSUE_COVER = (
+    "Dear Hiring Manager,\n"
+    "I am writing to apply \u2014 my experience aligns closely with your "
+    "needs. Following ITIL practices, I handled incident management and "
+    "SLA reporting, and I improved response times this year. During my "
+    "time at Acme, I supported 400 users across Active Directory and "
+    "Microsoft 365. I automated user provisioning with PowerShell during "
+    "onboarding and resolved VPN and endpoint issues for staff. I also "
+    "documented recurring problems so colleagues could follow the same "
+    "steps. I enjoy working directly with users and explaining technical "
+    "issues in plain language. I am comfortable working through a ticket "
+    "queue, checking each detail, and escalating when a problem needs more "
+    "specialist help. I like working in a team where support requests are "
+    "handled consistently and users know what to expect. I keep learning "
+    "new tools through documentation and practice, and I ask for help when "
+    "a problem is outside my experience. I am reliable, organised, and "
+    "comfortable taking ownership of a problem until it is resolved. I "
+    "would welcome the opportunity to discuss how my experience fits the "
+    "role and to learn more about your team.\n"
+    "\n"
+    "Sincerely,\n"
+    "Jane Doe\n"
+)
+
 
 class ScriptedClient:
     def __init__(self, responses):
@@ -103,14 +166,7 @@ def test_review_triggers_meaningful_revision_of_both_documents():
                 "Projects:\n"
                 "- Built a Wireshark network lab.\n"
             ),
-            (
-                "Dear Hiring Manager,\n"
-                "I am writing to apply \u2014 my experience aligns closely with "
-                "your needs. Following ITIL practices, I handled incident "
-                "management and SLA reporting, and I improved response times "
-                "this year.\n"
-                "Jane Doe\n"
-            ),
+            LONG_ISSUE_COVER,
             (
                 "Jane Doe\n"
                 "Professional Summary:\n"
@@ -119,13 +175,7 @@ def test_review_triggers_meaningful_revision_of_both_documents():
                 "Automated user provisioning with PowerShell during onboarding.\n"
                 "Resolved VPN and endpoint issues for staff at Acme.\n"
             ),
-            (
-                "Dear Hiring Manager,\n"
-                "I supported 400 users across Active Directory and Microsoft 365 "
-                "at Acme. I also automated user provisioning with PowerShell "
-                "during onboarding.\n"
-                "Jane Doe\n"
-            ),
+            LONG_CLEAN_COVER,
         ]
     )
     graph = build_ats_workflow(client, make_resume_registry())
@@ -169,12 +219,12 @@ def test_review_triggers_meaningful_revision_of_both_documents():
     assert "Current draft:" in revision_prompts
 
 
-def test_second_revision_pass_removes_remaining_unsupported_outcome():
+def test_deterministic_repair_replaces_an_extra_revision_pass():
     client = ScriptedClient(
         [
             "Add one specific PowerShell example.",
             "Jane Doe\nI am thrilled to apply.",
-            "Dear Hiring Manager,\nI supported 400 users at Acme.\nJane Doe",
+            LONG_CLEAN_COVER,
             "Jane Doe\nI improved efficiency across the team.",
             "Jane Doe\nSupported 400 users at Acme.",
         ]
@@ -184,7 +234,7 @@ def test_second_revision_pass_removes_remaining_unsupported_outcome():
     state = graph.invoke({"resume_text": RESUME, "job_description": JOB})
     result = result_from_state(state)
 
-    assert len(client.calls) == 5
+    assert len(client.calls) == 4
     assert "improved efficiency" not in (result.tailored_resume or "").lower()
     review = review_writing(
         RESUME, result.tailored_resume, result.cover_letter
@@ -197,9 +247,9 @@ def test_revision_restores_missing_applicant_name():
         [
             "Add one specific PowerShell example.",
             "Professional Summary:\nI am thrilled to apply.",
-            "Dear Hiring Manager,\nI am writing to apply.",
+            LONG_ISSUE_COVER.replace("\nJane Doe", ""),
             "Professional Summary:\nIT support engineer with three years of experience.",
-            "Dear Hiring Manager,\nI supported 400 users at Acme.",
+            LONG_CLEAN_COVER,
         ]
     )
     graph = build_ats_workflow(client, make_resume_registry())
@@ -221,7 +271,7 @@ def test_human_style_and_factual_rules_reach_generation_calls():
         [
             "Add one specific PowerShell example.",
             "Jane Doe\nTailored resume content grounded in Acme work.",
-            "Cover letter grounded in Acme work.\nJane Doe",
+            LONG_CLEAN_COVER,
         ]
     )
     graph = build_ats_workflow(client, make_resume_registry())
