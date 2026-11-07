@@ -9,13 +9,14 @@ from sqlalchemy.orm import Session
 from app.core.audit import record_admin_audit_event
 from app.core.security import AuthUser, get_current_user
 from app.db.session import get_db
-from app.models.admin import AdminUser, UserAccountStatus
+from app.models.admin import AdminUser, UserAccountStatus, UserEntitlement
 from app.models.profile import UserProfile
 
 SUSPENDED_MESSAGE = "This account is suspended."
 ADMIN_REQUIRED_MESSAGE = "Administrator access required."
 VERIFICATION_REQUIRED_MESSAGE = "Email verification is required."
 PROFILE_REQUIRED_MESSAGE = "Profile completion required."
+PRO_REQUIRED_MESSAGE = "A Pro subscription is required for this feature."
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,14 @@ def require_verified_email(
     raise _forbidden(VERIFICATION_REQUIRED_MESSAGE)
 
 
+def entitlement_tier(session: Session, user_id: str) -> str:
+    """Return the backend-authoritative entitlement tier for a user."""
+    entitlement = session.get(UserEntitlement, user_id)
+    if entitlement is None:
+        return "free"
+    return entitlement.tier
+
+
 def require_complete_profile(
     user: AuthUser = Depends(require_verified_email),
     session: Session = Depends(get_db),
@@ -85,6 +94,16 @@ def require_complete_profile(
     profile = session.get(UserProfile, user.id)
     if profile is None or not profile.full_name.strip():
         raise _forbidden(PROFILE_REQUIRED_MESSAGE)
+    return user
+
+
+def require_pro(
+    user: AuthUser = Depends(require_complete_profile),
+    session: Session = Depends(get_db),
+) -> AuthUser:
+    """Return the user only when they have a complete profile and Pro access."""
+    if entitlement_tier(session, user.id) != "pro":
+        raise _forbidden(PRO_REQUIRED_MESSAGE)
     return user
 
 

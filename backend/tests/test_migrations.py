@@ -30,14 +30,14 @@ def table_names(db_url: str) -> set[str]:
         return set(inspect(connection).get_table_names())
 
 
-def test_migration_graph_has_single_head_at_0010(tmp_path):
+def test_migration_graph_has_single_head_at_0012(tmp_path):
     cfg = make_alembic_config(
         tmp_path, f"sqlite:///{tmp_path / 'head.db'}"
     )
 
     script = ScriptDirectory.from_config(cfg)
 
-    assert script.get_heads() == ["0010"]
+    assert script.get_heads() == ["0012"]
 
 
 def test_alembic_rejects_sqlite_in_production(tmp_path, monkeypatch):

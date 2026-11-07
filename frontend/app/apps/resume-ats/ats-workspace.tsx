@@ -32,6 +32,7 @@ export function AtsWorkspace() {
   const [downloading, setDownloading] = useState(false);
   const [downloadingCoverLetter, setDownloadingCoverLetter] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadNeedsPro, setDownloadNeedsPro] = useState(false);
   const [resultTab, setResultTab] = useState<ResultTab>("suggestions");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -83,14 +84,24 @@ export function AtsWorkspace() {
     URL.revokeObjectURL(url);
   }
 
+  function needsPro(caught: unknown): boolean {
+    return (
+      caught instanceof ApiError &&
+      caught.status === 403 &&
+      /pro|subscription/i.test(caught.message)
+    );
+  }
+
   async function handleDownload() {
     if (!result) return;
     setDownloading(true);
     setDownloadError(null);
+    setDownloadNeedsPro(false);
     try {
       const blob = await downloadTailoredResumeDocx(result.analysis_id);
       triggerDownload(blob, "tailored-resume.docx");
     } catch (caught) {
+      setDownloadNeedsPro(needsPro(caught));
       setDownloadError(
         caught instanceof Error ? caught.message : "Download failed.",
       );
@@ -103,10 +114,12 @@ export function AtsWorkspace() {
     if (!result) return;
     setDownloadingCoverLetter(true);
     setDownloadError(null);
+    setDownloadNeedsPro(false);
     try {
       const blob = await downloadCoverLetterDocx(result.analysis_id);
       triggerDownload(blob, "tailored-cover-letter.docx");
     } catch (caught) {
+      setDownloadNeedsPro(needsPro(caught));
       setDownloadError(
         caught instanceof Error
           ? caught.message
@@ -122,6 +135,7 @@ export function AtsWorkspace() {
     setError(null);
     setErrorIsAuth(false);
     setDownloadError(null);
+    setDownloadNeedsPro(false);
     setResult(null);
     setResultTab("suggestions");
     setFileName(null);
@@ -590,7 +604,15 @@ export function AtsWorkspace() {
                 role="alert"
                 className="mt-5 border-l-2 border-danger bg-surface-muted px-4 py-3 text-sm leading-6 text-ink-soft"
               >
-                {downloadError}
+                <p>{downloadError}</p>
+                {downloadNeedsPro && (
+                  <Link
+                    href="/billing"
+                    className="mt-2 inline-flex text-sm font-medium text-accent underline underline-offset-2"
+                  >
+                    View Pro plans
+                  </Link>
+                )}
               </div>
             )}
 

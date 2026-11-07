@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { CatalogueGrid } from "./components/catalogue-grid";
 import { CatalogueSkeleton } from "./components/catalogue-skeleton";
+import { PlanStatusCard } from "./components/plan-status-card";
 
 export default function Home() {
   return (
@@ -36,6 +37,10 @@ export default function Home() {
             <span>Private workspace</span>
           </div>
         </div>
+      </section>
+
+      <section aria-label="Your plan" className="pt-8">
+        <PlanStatusCard />
       </section>
 
       <section
