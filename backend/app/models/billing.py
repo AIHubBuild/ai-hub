@@ -28,6 +28,12 @@ class StripeCustomer(Base):
     trial_used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    trial_checkout_session_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    trial_checkout_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

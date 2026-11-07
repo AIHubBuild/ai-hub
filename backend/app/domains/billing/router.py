@@ -52,6 +52,8 @@ def create_checkout(
         raise _error(503, str(exc)) from exc
     except service.AlreadySubscribedError as exc:
         raise _error(409, str(exc)) from exc
+    except service.TrialCheckoutPendingError as exc:
+        raise _error(409, str(exc)) from exc
     return CheckoutResponse(
         message="Checkout session created.",
         data=CheckoutData(**data),

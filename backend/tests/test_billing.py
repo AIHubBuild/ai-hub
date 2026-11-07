@@ -8,7 +8,7 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import jwt
 import pytest
@@ -289,7 +289,7 @@ def test_checkout_rejects_price_that_does_not_match_plan(
     )
 
 
-def test_checkout_creates_trial_once(app, client, monkeypatch):
+def _stub_checkout(monkeypatch):
     customer_calls: list[dict] = []
     checkout_calls: list[dict] = []
 
@@ -300,8 +300,9 @@ def test_checkout_creates_trial_once(app, client, monkeypatch):
     def fake_checkout_create(**kwargs):
         checkout_calls.append(kwargs)
         return {
-            "id": "cs_test_1",
-            "url": "https://checkout.stripe.test/cs_test_1",
+            "id": f"cs_test_{len(checkout_calls)}",
+            "url": f"https://checkout.stripe.test/cs_test_{len(checkout_calls)}",
+            "expires_at": int(time.time()) + 3600,
         }
 
     monkeypatch.setattr(
@@ -312,6 +313,13 @@ def test_checkout_creates_trial_once(app, client, monkeypatch):
         "create",
         staticmethod(fake_checkout_create),
     )
+    return customer_calls, checkout_calls
+
+
+def test_checkout_does_not_consume_trial_until_subscription_created(
+    app, client, monkeypatch
+):
+    customer_calls, checkout_calls = _stub_checkout(monkeypatch)
 
     first = client.post(
         "/api/v1/billing/checkout", headers=auth_headers()
@@ -319,7 +327,6 @@ def test_checkout_creates_trial_once(app, client, monkeypatch):
     assert first.status_code == 200
     first_data = first.json()["data"]
     assert first_data["trial_applied"] is True
-    assert first_data["url"].startswith("https://checkout.stripe.test/")
     assert checkout_calls[0]["subscription_data"]["trial_period_days"] == 1
     assert checkout_calls[0]["client_reference_id"] == USER_ID
     assert checkout_calls[0]["line_items"] == [
@@ -329,16 +336,139 @@ def test_checkout_creates_trial_once(app, client, monkeypatch):
     with app.state.session_factory() as session:
         customer = session.get(StripeCustomer, USER_ID)
         assert customer is not None
-        assert customer.stripe_customer_id == "cus_test_1"
-        assert customer.trial_used_at is not None
+        assert customer.trial_used_at is None
+        assert customer.trial_checkout_session_id == "cs_test_1"
+        assert customer.trial_checkout_expires_at is not None
 
+    # A second attempt while the first trial Checkout is pending is blocked.
     second = client.post(
         "/api/v1/billing/checkout", headers=auth_headers()
     )
-    assert second.status_code == 200
-    assert second.json()["data"]["trial_applied"] is False
-    assert "trial_period_days" not in checkout_calls[1]["subscription_data"]
+    assert second.status_code == 409
+    assert len(checkout_calls) == 1
+
+    # Abandoning Checkout does not permanently consume the trial. Once the
+    # pending session claim expires, another attempt can receive the trial.
+    with app.state.session_factory() as session:
+        customer = session.get(StripeCustomer, USER_ID)
+        customer.trial_checkout_expires_at = datetime.now(
+            timezone.utc
+        ) - timedelta(seconds=1)
+        session.commit()
+
+    retry = client.post(
+        "/api/v1/billing/checkout", headers=auth_headers()
+    )
+    assert retry.status_code == 200
+    assert retry.json()["data"]["trial_applied"] is True
+    assert len(checkout_calls) == 2
     assert customer_calls and len(customer_calls) == 1
+
+    # Only a verified subscription event consumes the trial.
+    now = int(time.time())
+    event = subscription_event(
+        "evt_trial_created",
+        status="trialing",
+        event_type="customer.subscription.created",
+        trial_start=now,
+    )
+    assert send_webhook(client, event).status_code == 200
+    with app.state.session_factory() as session:
+        customer = session.get(StripeCustomer, USER_ID)
+        assert customer.trial_used_at is not None
+        assert customer.trial_checkout_session_id is None
+        assert customer.trial_checkout_expires_at is None
+
+    # While the trialing subscription is active, another checkout is blocked.
+    active_attempt = client.post(
+        "/api/v1/billing/checkout", headers=auth_headers()
+    )
+    assert active_attempt.status_code == 409
+
+    # After the trial subscription ends, the trial is still marked as used.
+    send_webhook(
+        client,
+        subscription_event(
+            "evt_trial_ended",
+            status="canceled",
+            event_type="customer.subscription.deleted",
+        ),
+    )
+    after = client.post(
+        "/api/v1/billing/checkout", headers=auth_headers()
+    )
+    assert after.status_code == 200
+    assert after.json()["data"]["trial_applied"] is False
+    assert "trial_period_days" not in checkout_calls[-1]["subscription_data"]
+
+
+def test_duplicate_subscription_events_do_not_duplicate_trial(
+    app, client, monkeypatch
+):
+    _stub_checkout(monkeypatch)
+    first = client.post(
+        "/api/v1/billing/checkout", headers=auth_headers()
+    )
+    assert first.status_code == 200
+    assert first.json()["data"]["trial_applied"] is True
+
+    now = int(time.time())
+    event = subscription_event(
+        "evt_trial_duplicate",
+        status="trialing",
+        event_type="customer.subscription.created",
+        trial_start=now,
+    )
+    assert send_webhook(client, event).status_code == 200
+    duplicate = send_webhook(client, event)
+    assert duplicate.status_code == 200
+    assert duplicate.json()["data"]["duplicate"] is True
+
+    with app.state.session_factory() as session:
+        customer = session.get(StripeCustomer, USER_ID)
+        assert customer.trial_used_at is not None
+        assert customer.trial_checkout_session_id is None
+        assert (
+            session.query(StripeSubscription)
+            .filter(StripeSubscription.stripe_subscription_id == "sub_test_1")
+            .count()
+            == 1
+        )
+
+
+def test_expired_unpaid_trial_revokes_docx_access(app, client, monkeypatch):
+    _stub_checkout(monkeypatch)
+    first = client.post(
+        "/api/v1/billing/checkout", headers=auth_headers()
+    )
+    assert first.status_code == 200
+    now = int(time.time())
+    send_webhook(
+        client,
+        subscription_event(
+            "evt_trial_active",
+            status="trialing",
+            event_type="customer.subscription.created",
+            trial_start=now,
+        ),
+    )
+    send_webhook(
+        client,
+        subscription_event(
+            "evt_trial_unpaid",
+            status="unpaid",
+            event_type="customer.subscription.updated",
+        ),
+    )
+    response = client.get(
+        f"/api/v1/analyses/{SUB_UUID}/tailored-resume.docx",
+        headers=auth_headers(),
+    )
+    assert response.status_code == 403
+    with app.state.session_factory() as session:
+        customer = session.get(StripeCustomer, USER_ID)
+        assert customer.trial_used_at is not None
+        assert session.get(UserEntitlement, USER_ID).tier == "free"
 
 
 def test_checkout_blocks_existing_active_subscription(app, client, monkeypatch):

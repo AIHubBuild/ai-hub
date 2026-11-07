@@ -11,7 +11,7 @@ Security rules:
 
 import math
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import stripe
@@ -44,6 +44,10 @@ class BillingNotConfiguredError(RuntimeError):
 
 class AlreadySubscribedError(RuntimeError):
     """The user already has a subscription that blocks a new checkout."""
+
+
+class TrialCheckoutPendingError(RuntimeError):
+    """A trial Checkout Session is already pending for this user."""
 
 
 class NoBillingAccountError(RuntimeError):
@@ -181,14 +185,24 @@ def get_or_create_customer(
     kwargs: dict[str, Any] = {"metadata": {"user_id": user.id}}
     if user.email:
         kwargs["email"] = user.email
-    created = stripe.Customer.create(**kwargs)
+    created = stripe.Customer.create(
+        idempotency_key=f"billing-customer-{user.id}", **kwargs
+    )
     customer = StripeCustomer(
         user_id=user.id,
         stripe_customer_id=created["id"],
         email=user.email,
     )
     session.add(customer)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        # Another request created the mapping concurrently.
+        session.rollback()
+        existing = session.get(StripeCustomer, user.id)
+        if existing is not None:
+            return existing
+        raise
     session.refresh(customer)
     return customer
 
@@ -207,6 +221,22 @@ def _blocking_subscription(
     )
 
 
+def _trial_checkout_pending(customer: StripeCustomer) -> bool:
+    if not customer.trial_checkout_session_id:
+        return False
+    expires_at = customer.trial_checkout_expires_at
+    if expires_at is None:
+        return True
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at > _utcnow()
+
+
+def _clear_trial_checkout(customer: StripeCustomer) -> None:
+    customer.trial_checkout_session_id = None
+    customer.trial_checkout_expires_at = None
+
+
 def trial_eligible(
     session: Session, user: AuthUser, customer: StripeCustomer | None
 ) -> bool:
@@ -214,6 +244,8 @@ def trial_eligible(
     if not user.email_verified:
         return False
     if customer is not None and customer.trial_used_at is not None:
+        return False
+    if customer is not None and _trial_checkout_pending(customer):
         return False
     if (
         session.query(StripeSubscription)
@@ -243,12 +275,23 @@ def create_checkout_session(
         raise BillingNotConfiguredError(
             "Stripe price configuration is invalid."
         ) from exc
+    get_or_create_customer(session, user, settings)
+    customer = (
+        session.query(StripeCustomer)
+        .filter(StripeCustomer.user_id == user.id)
+        .with_for_update()
+        .one()
+    )
+
     if _blocking_subscription(session, user.id) is not None:
         raise AlreadySubscribedError(
             "An active subscription already exists for this account."
         )
+    if _trial_checkout_pending(customer):
+        raise TrialCheckoutPendingError(
+            "A trial checkout is already in progress. Complete it or wait for it to expire."
+        )
 
-    customer = get_or_create_customer(session, user, settings)
     eligible = trial_eligible(session, user, customer)
 
     subscription_data: dict[str, Any] = {
@@ -268,8 +311,14 @@ def create_checkout_session(
     )
 
     if eligible:
-        customer.trial_used_at = _utcnow()
-        session.commit()
+        # Claim the trial for this Checkout attempt. It is not consumed
+        # permanently until Stripe confirms the subscription.
+        customer.trial_checkout_session_id = checkout["id"]
+        customer.trial_checkout_expires_at = (
+            _dt(checkout.get("expires_at"))
+            or _utcnow() + timedelta(days=1)
+        )
+    session.commit()
 
     return {
         "url": checkout["url"],
@@ -435,9 +484,10 @@ def sync_subscription(session: Session, subscription: Any) -> None:
     record.trial_start = trial_start
     record.trial_end = trial_end
 
-    if customer is not None and trial_start is not None:
-        if customer.trial_used_at is None:
+    if customer is not None:
+        if trial_start is not None and customer.trial_used_at is None:
             customer.trial_used_at = trial_start
+        _clear_trial_checkout(customer)
 
     _sync_entitlement(session, user_id, status)
 
