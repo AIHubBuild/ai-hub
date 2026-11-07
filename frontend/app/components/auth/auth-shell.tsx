@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HCAPTCHA_ENABLED } from "../../lib/hcaptcha";
 import { HubMarkIcon } from "../icons";
 
 export function AuthShell({
@@ -63,8 +64,12 @@ export function AuthShell({
             >
               Privacy Notice
             </Link>
-            <span aria-hidden="true" className="h-3 w-px bg-line" />
-            <span>Protected by hCaptcha</span>
+            {HCAPTCHA_ENABLED && (
+              <>
+                <span aria-hidden="true" className="h-3 w-px bg-line" />
+                <span>Protected by hCaptcha</span>
+              </>
+            )}
           </div>
         </div>
       </div>
