@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.ai_core import AICore, get_ai_core
 from app.core.config import Settings, get_app_settings
-from app.core.access import require_complete_profile
+from app.core.access import require_complete_profile, require_pro
 from app.core.security import AuthUser
 from app.db.session import get_db
 from app.domains.resume_ats import service
@@ -227,7 +227,7 @@ def analyze_resume(
 def download_cover_letter(
     analysis_id: str,
     session: Session = Depends(get_db),
-    user: AuthUser = Depends(require_complete_profile),
+    user: AuthUser = Depends(require_pro),
 ) -> Response:
     if not _is_uuid(analysis_id):
         raise _error(404, "Analysis not found.")
@@ -265,7 +265,7 @@ def download_cover_letter(
 def download_tailored_resume(
     analysis_id: str,
     session: Session = Depends(get_db),
-    user: AuthUser = Depends(require_complete_profile),
+    user: AuthUser = Depends(require_pro),
 ) -> Response:
     if not _is_uuid(analysis_id):
         raise _error(404, "Analysis not found.")

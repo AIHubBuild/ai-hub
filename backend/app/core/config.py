@@ -119,6 +119,23 @@ class Settings(BaseSettings):
     # {supabase_url}/auth/v1/.well-known/jwks.json when unset.
     supabase_jwks_url: str = ""
 
+    # Public frontend origin used for Stripe Checkout and Customer Portal
+    # return URLs. Never a secret.
+    frontend_url: str = "http://localhost:3000"
+
+    # Stripe billing. Keys are server-side only and ``repr=False`` keeps
+    # them out of accidental configuration dumps/logs. Billing endpoints
+    # fail closed with 503 until the secret key and recurring price are
+    # configured.
+    stripe_secret_key: str = Field(default="", repr=False)
+    stripe_webhook_secret: str = Field(default="", repr=False)
+    stripe_price_id: str = ""
+    # Display/verification values for the current Pro Price. The actual
+    # charge always comes from Stripe's Price object identified above.
+    stripe_pro_price_cents: int = 1900
+    stripe_pro_price_currency: str = "eur"
+    stripe_trial_hours: int = 24
+
     # OpenAI-compatible AI provider (shared by every assistant).
     #
     # DeepSeek is the default and the API key is read from the

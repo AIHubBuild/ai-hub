@@ -22,6 +22,11 @@ const NAV_LINKS = [
     label: "IT Support",
     match: (pathname: string) => pathname.startsWith("/apps/support"),
   },
+  {
+    href: "/pricing",
+    label: "Pricing",
+    match: (pathname: string) => pathname.startsWith("/pricing"),
+  },
 ];
 
 function accountInitial(email: string | undefined): string {
@@ -121,6 +126,12 @@ export function SiteHeader() {
               >
                 Profile
               </Link>
+              <Link
+                href="/billing"
+                className="rounded-lg px-2 py-1.5 text-sm font-medium text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                Billing
+              </Link>
               <button
                 type="button"
                 onClick={() => signOut()}
@@ -177,6 +188,13 @@ export function SiteHeader() {
                     className="ui-button ui-button-secondary"
                   >
                     Profile
+                  </Link>
+                  <Link
+                    href="/billing"
+                    onClick={() => setMenuOpen(false)}
+                    className="ui-button ui-button-secondary"
+                  >
+                    Billing
                   </Link>
                   <button
                     type="button"

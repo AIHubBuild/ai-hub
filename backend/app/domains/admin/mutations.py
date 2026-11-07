@@ -315,6 +315,7 @@ def upsert_entitlement(
     else:
         entitlement.tier = payload.tier
         entitlement.limits = payload.limits
+        entitlement.source = "manual"
         entitlement.granted_by = admin.id
         entitlement.reason = payload.reason.strip()
 

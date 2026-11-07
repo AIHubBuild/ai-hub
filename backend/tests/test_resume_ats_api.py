@@ -29,6 +29,7 @@ from app.domains.resume_ats.prompts import register_prompts
 from app.domains.resume_ats.workflow import ATS_WORKFLOW_ID, build_ats_workflow
 from app.main import create_app
 from app.models import Base
+from app.models.admin import UserEntitlement
 from app.models.admin import UserAccountStatus
 from app.models.resume import AtsAnalysisRecord, Resume
 
@@ -106,10 +107,28 @@ def make_settings(tmp_path, **overrides) -> Settings:
     return Settings(**values)
 
 
+def seed_pro_entitlements(app: FastAPI, *user_ids: str) -> None:
+    with app.state.session_factory() as session:
+        for user_id in user_ids:
+            if session.get(UserEntitlement, user_id) is not None:
+                continue
+            session.add(
+                UserEntitlement(
+                    user_id=user_id,
+                    tier="pro",
+                    source="manual",
+                    granted_by=None,
+                    reason="test fixture Pro access",
+                )
+            )
+        session.commit()
+
+
 def build_app(tmp_path, settings: Settings) -> FastAPI:
     app = create_app(settings)
     Base.metadata.create_all(app.state.engine)
     seed_complete_profile(app, USER_A, USER_B)
+    seed_pro_entitlements(app, USER_A, USER_B)
     return app
 
 

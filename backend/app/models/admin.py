@@ -144,7 +144,7 @@ class UserEntitlement(Base):
             name="ck_user_entitlements_tier",
         ),
         CheckConstraint(
-            "source = 'manual'",
+            "source IN ('manual', 'stripe')",
             name="ck_user_entitlements_source",
         ),
     )
@@ -155,7 +155,9 @@ class UserEntitlement(Base):
     source: Mapped[str] = mapped_column(
         String(16), nullable=False, default="manual"
     )
-    granted_by: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    granted_by: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), nullable=True
+    )
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
