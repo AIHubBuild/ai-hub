@@ -4,6 +4,7 @@ import HCaptcha from "@hcaptcha/react-hcaptcha";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
+import { HCAPTCHA_ENABLED } from "../lib/hcaptcha";
 import { fetchProfile, PROFILE_POLICY_VERSION } from "../lib/profile";
 import { getSupabase } from "../lib/supabase";
 import { PasswordInput } from "../components/auth/password-input";
@@ -67,6 +68,9 @@ export function LoginForm() {
   }
 
   function validateCaptcha(): string | null {
+    if (!HCAPTCHA_ENABLED) {
+      return null;
+    }
     if (!HCAPTCHA_SITE_KEY) {
       return "hCaptcha is not configured. Add NEXT_PUBLIC_HCAPTCHA_SITE_KEY and rebuild the frontend.";
     }
@@ -123,7 +127,7 @@ export function LoginForm() {
     if (Object.keys(errors).length > 0) {
       return;
     }
-    if (captchaToken === null) {
+    if (HCAPTCHA_ENABLED && captchaToken === null) {
       setError("Complete the CAPTCHA to continue.");
       return;
     }
@@ -133,7 +137,9 @@ export function LoginForm() {
       password,
       options: {
         emailRedirectTo: verificationCallbackUrl(),
-        captchaToken,
+        ...(HCAPTCHA_ENABLED && captchaToken !== null
+          ? { captchaToken }
+          : {}),
         data: {
           full_name: fullName.trim(),
           terms_accepted: true,
@@ -187,7 +193,7 @@ export function LoginForm() {
     if (Object.keys(errors).length > 0) {
       return;
     }
-    if (captchaToken === null) {
+    if (HCAPTCHA_ENABLED && captchaToken === null) {
       setError("Complete the CAPTCHA to continue.");
       return;
     }
@@ -196,7 +202,9 @@ export function LoginForm() {
       await client.auth.signInWithPassword({
         email: email.trim(),
         password,
-        options: { captchaToken },
+        ...(HCAPTCHA_ENABLED && captchaToken !== null
+          ? { options: { captchaToken } }
+          : {}),
       });
 
     if (authError) {
@@ -254,7 +262,7 @@ export function LoginForm() {
       setError(captchaValidationError);
       return;
     }
-    if (captchaToken === null) {
+    if (HCAPTCHA_ENABLED && captchaToken === null) {
       setError("Complete the CAPTCHA to resend.");
       return;
     }
@@ -268,7 +276,9 @@ export function LoginForm() {
         email: pendingEmail,
         options: {
           emailRedirectTo: verificationCallbackUrl(),
-          captchaToken,
+          ...(HCAPTCHA_ENABLED && captchaToken !== null
+            ? { captchaToken }
+            : {}),
         },
       });
       resetCaptcha();
@@ -532,59 +542,60 @@ export function LoginForm() {
         </>
       )}
 
-      <div className="pt-1">
-        {HCAPTCHA_SITE_KEY ? (
-          <HCaptcha
-            ref={captchaRef}
-            sitekey={HCAPTCHA_SITE_KEY}
-            theme="dark"
-            reCaptchaCompat={false}
-            onVerify={(token) => {
-              setCaptchaToken(token);
-              setCaptchaError(null);
-            }}
-            onExpire={() => {
-              setCaptchaToken(null);
-              setCaptchaError("CAPTCHA expired. Verify again to continue.");
-            }}
-            onError={() => {
-              setCaptchaToken(null);
-              setCaptchaError("CAPTCHA could not be completed. Try again.");
-            }}
-          />
-        ) : (
-          <p
-            role="alert"
-            className="auth-message-error rounded-xl border px-3 py-2 text-xs"
-          >
-            hCaptcha is not configured. Add NEXT_PUBLIC_HCAPTCHA_SITE_KEY and
-            rebuild the frontend.
+      {HCAPTCHA_ENABLED && (
+        <div className="pt-1">
+          {HCAPTCHA_SITE_KEY ? (
+            <HCaptcha
+              ref={captchaRef}
+              sitekey={HCAPTCHA_SITE_KEY}
+              theme="dark"
+              reCaptchaCompat={false}
+              onVerify={(token) => {
+                setCaptchaToken(token);
+                setCaptchaError(null);
+              }}
+              onExpire={() => {
+                setCaptchaToken(null);
+                setCaptchaError("CAPTCHA expired. Verify again to continue.");
+              }}
+              onError={() => {
+                setCaptchaToken(null);
+                setCaptchaError("CAPTCHA could not be completed. Try again.");
+              }}
+            />
+          ) : (
+            <p
+              role="alert"
+              className="auth-message-error rounded-xl border px-3 py-2 text-xs"
+            >
+              hCaptcha is not configured. Add NEXT_PUBLIC_HCAPTCHA_SITE_KEY and
+              rebuild the frontend.
+            </p>
+          )}
+          {captchaError && (
+            <p role="alert" className="auth-field-error mt-2 text-xs">
+              {captchaError}
+            </p>
+          )}
+          {HCAPTCHA_SITE_KEY && captchaToken === null && !captchaError && (
+            <p className="mt-2 text-[11px] text-muted">
+              {mode === "verify-email"
+                ? "Complete the CAPTCHA to resend the confirmation email."
+                : "Complete the CAPTCHA to continue."}
+            </p>
+          )}
+          <p className="mt-2 text-[11px] leading-5 text-muted">
+            Protected by hCaptcha. See our{" "}
+            <Link
+              href="/privacy"
+              className="font-medium text-accent underline underline-offset-2"
+            >
+              Privacy Notice
+            </Link>
+            .
           </p>
-        )}
-        {captchaError && (
-          <p role="alert" className="auth-field-error mt-2 text-xs">
-            {captchaError}
-          </p>
-        )}
-        {HCAPTCHA_SITE_KEY && captchaToken === null && !captchaError && (
-          <p className="mt-2 text-[11px] text-muted">
-            {mode === "verify-email"
-              ? "Complete the CAPTCHA to resend the confirmation email."
-              : "Complete the CAPTCHA to continue."}
-          </p>
-        )}
-        <p className="mt-2 text-[11px] leading-5 text-muted">
-          Protected by hCaptcha. See our{" "}
-          <Link
-            href="/privacy"
-            className="font-medium text-accent underline underline-offset-2"
-          >
-            Privacy Notice
-          </Link>
-          .
-        </p>
-      </div>
-
+        </div>
+      )}
       {error && (
         <p role="alert" className="auth-message-error rounded-xl border px-3 py-2 text-sm">
           {error}
@@ -601,7 +612,11 @@ export function LoginForm() {
           <button
             type="button"
             onClick={handleResend}
-            disabled={resending || !HCAPTCHA_SITE_KEY || captchaToken === null}
+            disabled={
+              resending ||
+              (HCAPTCHA_ENABLED &&
+                (!HCAPTCHA_SITE_KEY || captchaToken === null))
+            }
             className="ui-button ui-button-primary h-11 w-full"
           >
             {resending && <Spinner />}
@@ -618,7 +633,11 @@ export function LoginForm() {
       ) : (
         <button
           type="submit"
-          disabled={submitting || !HCAPTCHA_SITE_KEY || captchaToken === null}
+          disabled={
+            submitting ||
+            (HCAPTCHA_ENABLED &&
+              (!HCAPTCHA_SITE_KEY || captchaToken === null))
+          }
           className="ui-button ui-button-primary h-11 w-full"
         >
           {submitting && <Spinner />}
