@@ -38,6 +38,32 @@ export interface WritingReview {
   issues: WritingIssue[];
 }
 
+
+export interface DocumentValidationIssue {
+  document: string;
+  severity: "error" | "warning";
+  code: string;
+  message: string;
+  excerpt?: string;
+  source?: string;
+}
+
+export interface DocumentValidationDocument {
+  blocking_issues: DocumentValidationIssue[];
+  warnings: DocumentValidationIssue[];
+  pages: number;
+}
+
+export interface DocumentValidationReport {
+  ready: boolean;
+  documents: {
+    cv: DocumentValidationDocument;
+    cover_letter: DocumentValidationDocument;
+  };
+  ai_review_available: boolean;
+  ai_review_error: string | null;
+}
+
 export interface AtsAnalysisData {
   analysis_id: string;
   resume_id: string;
@@ -125,12 +151,65 @@ export async function downloadTailoredResumeDocx(
 export async function downloadCoverLetterDocx(
   analysisId: string,
 ): Promise<Blob> {
+  return downloadDocument(
+    analysisId,
+    "tailored-cover-letter.docx",
+  );
+}
+
+export async function downloadTailoredResumePdf(
+  analysisId: string,
+): Promise<Blob> {
+  return downloadDocument(analysisId, "tailored-resume.pdf");
+}
+
+export async function downloadCoverLetterPdf(
+  analysisId: string,
+): Promise<Blob> {
+  return downloadDocument(analysisId, "tailored-cover-letter.pdf");
+}
+
+async function downloadDocument(
+  analysisId: string,
+  filename: string,
+): Promise<Blob> {
   const response = await fetch(
-    `${API_URL}/api/v1/analyses/${analysisId}/tailored-cover-letter.docx`,
+    `${API_URL}/api/v1/analyses/${analysisId}/${filename}`,
     { headers: await authHeaders() },
   );
   if (!response.ok) {
     throw new ApiError(await errorMessage(response), response.status);
   }
   return response.blob();
+}
+
+export async function fetchDocumentValidation(
+  analysisId: string,
+): Promise<DocumentValidationReport> {
+  const response = await fetch(
+    `${API_URL}/api/v1/analyses/${analysisId}/document-validation`,
+    { headers: await authHeaders(), cache: "no-store" },
+  );
+  const body = await requireOk<
+    Envelope<DocumentValidationReport>
+  >(response);
+  return body.data;
+}
+
+export function previewTailoredResumePdf(
+  analysisId: string,
+): Promise<Blob> {
+  return downloadDocument(
+    analysisId,
+    "tailored-resume.pdf?preview=true",
+  );
+}
+
+export function previewCoverLetterPdf(
+  analysisId: string,
+): Promise<Blob> {
+  return downloadDocument(
+    analysisId,
+    "tailored-cover-letter.pdf?preview=true",
+  );
 }

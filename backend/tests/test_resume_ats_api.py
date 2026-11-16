@@ -31,6 +31,7 @@ from app.main import create_app
 from app.models import Base
 from app.models.admin import UserAccountStatus
 from app.models.resume import AtsAnalysisRecord, Resume
+from tests.profile_test_helpers import seed_complete_profile
 
 RESUME_TEXT = (
     "Jane Doe\njane@example.com\n"
@@ -82,13 +83,28 @@ API_COVER = (
     "Jane Doe\n"
 )
 
+FAKE_TAILORED_RESUME = """Jane Doe
+IT Support Engineer
+jane@example.com | +49 123 456789
+
+PROFILE
+Tailored resume content. Jane Doe supports Active Directory, Microsoft 365,
+VPN connectivity and endpoint troubleshooting for end users.
+
+CORE SKILLS
+End-user Support: Windows 10/11, Microsoft 365, account access and VPN.
+Networking: DNS, DHCP and connectivity troubleshooting.
+
+EXPERIENCE
+IT Support Engineer | Example GmbH, Berlin Jan 2020 - Present
+- Supported users with Active Directory and Microsoft 365 access issues.
+- Troubleshot VPN and network connectivity problems."""
+
 FAKE_RESPONSES = [
     "Add PowerShell automation projects and lab exposure.",
-    "Jane Doe\nTailored resume content.",
+    FAKE_TAILORED_RESUME,
     API_COVER,
 ]
-
-from tests.profile_test_helpers import seed_complete_profile
 
 TEST_SECRET = "test-jwt-secret-0123456789abcdef0123456789abcdef0123456789abcdef"
 
@@ -171,8 +187,8 @@ def install_fake_provider(app: FastAPI, provider: FakeProvider) -> None:
 @pytest.fixture
 def client(tmp_path):
     app = build_app(tmp_path, make_settings(tmp_path))
-    seed_complete_profile(app, USER_A, USER_B)
     install_fake_provider(app, FakeProvider(responses=list(FAKE_RESPONSES)))
+    seed_complete_profile(app, USER_A, USER_B)
     with TestClient(app) as test_client:
         yield test_client, app
 
@@ -809,7 +825,10 @@ def test_download_tailored_resume_docx(client):
 
     parsed = DocxDocument(BytesIO(response.content))
     paragraphs = [p.text for p in parsed.paragraphs if p.text.strip()]
-    assert "Tailored resume content." in paragraphs
+    assert any(
+        "Tailored resume content." in paragraph
+        for paragraph in paragraphs
+    )
 
 
 def test_download_unknown_analysis_returns_404(client):
@@ -989,3 +1008,146 @@ def test_download_cover_letter_other_user_returns_404(client):
     )
 
     assert response.status_code == 404
+
+
+def test_download_tailored_resume_pdf(client):
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    test_client, _ = client
+    resume_id = upload_resume(test_client).json()["data"]["resume_id"]
+    analysis_id = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(),
+    ).json()["data"]["analysis_id"]
+
+    response = test_client.get(
+        f"/api/v1/analyses/{analysis_id}/tailored-resume.pdf",
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/pdf")
+    assert "tailored-resume.pdf" in response.headers["content-disposition"]
+    assert response.content.startswith(b"%PDF")
+
+    reader = PdfReader(BytesIO(response.content))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "JANE DOE" in text
+    assert "Tailored resume content." in text
+
+
+def test_download_cover_letter_pdf(client):
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    test_client, _ = client
+    resume_id = upload_resume(test_client).json()["data"]["resume_id"]
+    analysis_id = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(),
+    ).json()["data"]["analysis_id"]
+
+    response = test_client.get(
+        f"/api/v1/analyses/{analysis_id}/tailored-cover-letter.pdf",
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/pdf")
+    assert (
+        "tailored-cover-letter.pdf"
+        in response.headers["content-disposition"]
+    )
+    assert response.content.startswith(b"%PDF")
+
+    reader = PdfReader(BytesIO(response.content))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "Dear Hiring Team," in text
+    assert "Sincerely," in text
+
+
+def test_pdf_download_requires_authentication(client):
+    test_client, _ = client
+    response = test_client.get(
+        "/api/v1/analyses/550e8400-e29b-41d4-a716-446655440000/tailored-resume.pdf"
+    )
+    assert response.status_code == 401
+
+
+def test_pdf_downloads_other_users_analysis_return_404(client):
+    test_client, _ = client
+    resume_id = upload_resume(
+        test_client, user_id=USER_A
+    ).json()["data"]["resume_id"]
+    analysis_id = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(USER_A),
+    ).json()["data"]["analysis_id"]
+
+    for filename in ("tailored-resume.pdf", "tailored-cover-letter.pdf"):
+        response = test_client.get(
+            f"/api/v1/analyses/{analysis_id}/{filename}",
+            headers=auth_headers(USER_B),
+        )
+        assert response.status_code == 404
+
+
+def test_document_validation_endpoint_reports_readiness(client):
+    test_client, _ = client
+    resume_id = upload_resume(test_client).json()["data"]["resume_id"]
+    analysis_id = test_client.post(
+        f"/api/v1/resumes/{resume_id}/ats-analysis",
+        json={"job_description": JOB_DESCRIPTION},
+        headers=auth_headers(),
+    ).json()["data"]["analysis_id"]
+
+    response = test_client.get(
+        f"/api/v1/analyses/{analysis_id}/document-validation",
+        headers=auth_headers(),
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["ready"] is True
+    assert data["documents"]["cv"]["blocking_issues"] == []
+    assert data["documents"]["cover_letter"]["blocking_issues"] == []
+
+
+def test_invalid_document_blocks_download_but_preview_is_available(client):
+    test_client, app = client
+    resume_id = upload_resume(test_client).json()["data"]["resume_id"]
+    with app.state.session_factory() as session:
+        record = AtsAnalysisRecord(
+            resume_id=resume_id,
+            run_id="550e8400-e29b-41d4-a716-446655440002",
+            job_description=JOB_DESCRIPTION,
+            ats_score=50,
+            matching_keywords=[],
+            missing_keywords=[],
+            tailored_resume="Jane Doe\nUnstructured text.",
+            cover_letter=API_COVER,
+        )
+        session.add(record)
+        session.commit()
+        analysis_id = record.id
+
+    blocked = test_client.get(
+        f"/api/v1/analyses/{analysis_id}/tailored-resume.docx",
+        headers=auth_headers(),
+    )
+    assert blocked.status_code == 422
+    assert blocked.json()["message"] == "Document validation failed."
+    assert blocked.json()["issues"]
+
+    preview = test_client.get(
+        f"/api/v1/analyses/{analysis_id}/tailored-resume.pdf?preview=true",
+        headers=auth_headers(),
+    )
+    assert preview.status_code == 200
+    assert preview.headers["content-type"].startswith("application/pdf")
+    assert preview.content.startswith(b"%PDF")

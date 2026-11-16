@@ -992,6 +992,39 @@ PROMPT_TEMPLATES.extend(
 )
 
 
+# ---------------------------------------------------------------
+# Document quality review. This is a separate QA prompt used by the
+# document-validation layer; it does not change the tailoring workflow.
+# ---------------------------------------------------------------
+
+DOCUMENT_QUALITY_REVIEW_TEMPLATE = PromptTemplate(
+    prompt_id="resume_ats/document_quality_review",
+    version=1,
+    system=(
+        "You are a meticulous copy editor. Review only for clear spelling "
+        "and grammar errors. Do not rewrite, add facts, infer missing "
+        "information, comment on style, or invent qualifications."
+    ),
+    user_template=(
+        "Review the CV and cover letter below for clear spelling and grammar "
+        "errors only.\n"
+        "Return JSON only, with this exact shape:\n"
+        '{{\"cv_issues\":[{{\"code\":\"spelling|grammar\",'
+        '\"severity\":\"error|warning\",\"message\":\"...\",'
+        '\"excerpt\":\"...\"}}],'
+        '\"cover_letter_issues\":[same shape]}}\n'
+        "Use an empty array when there are no issues. Do not include "
+        "Markdown, explanations, or any text outside the JSON object.\n"
+        "Only report an error when it is objectively a spelling or grammar "
+        "mistake. Do not report subjective style preferences.\n"
+        "CV:\n{cv_text}\n\n"
+        "COVER LETTER:\n{cover_letter_text}"
+    ),
+)
+
+PROMPT_TEMPLATES.append(DOCUMENT_QUALITY_REVIEW_TEMPLATE)
+
+
 def register_prompts(registry: PromptRegistry) -> None:
     """Register the Resume ATS prompt assets into the shared registry.
 

@@ -14,6 +14,7 @@ EXPECTED_PROMPT_IDS = {
     "resume_ats/ats_analysis",
     "resume_ats/tailored_resume",
     "resume_ats/cover_letter",
+    "resume_ats/document_quality_review",
 }
 
 
@@ -23,7 +24,7 @@ def make_registered_registry() -> PromptRegistry:
     return registry
 
 
-def test_registers_exactly_the_three_workflow_templates():
+def test_registers_the_workflow_and_document_review_templates():
     registry = make_registered_registry()
 
     assert {t.prompt_id for t in PROMPT_TEMPLATES} == EXPECTED_PROMPT_IDS
@@ -31,6 +32,7 @@ def test_registers_exactly_the_three_workflow_templates():
         "resume_ats/ats_analysis": 5,
         "resume_ats/tailored_resume": 7,
         "resume_ats/cover_letter": 7,
+        "resume_ats/document_quality_review": 1,
     }
     for prompt_id in EXPECTED_PROMPT_IDS:
         assert registry.get(prompt_id).version == latest_versions[prompt_id]
@@ -266,6 +268,7 @@ def test_app_factory_registers_resume_ats_prompts():
         "resume_ats/ats_analysis": 5,
         "resume_ats/tailored_resume": 7,
         "resume_ats/cover_letter": 7,
+        "resume_ats/document_quality_review": 1,
     }
     for prompt_id in EXPECTED_PROMPT_IDS:
         assert registry.get(prompt_id).version == latest_versions[prompt_id]

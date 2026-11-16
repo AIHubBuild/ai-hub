@@ -22,7 +22,7 @@ threadpool. All responses use the platform envelope
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -44,6 +44,7 @@ from app.domains.resume_ats.schemas import (
 from app.domains.resume_ats.service import (
     AnalysisNotReadyError,
     AnalysisNotFoundError,
+    DocumentValidationError,
     ProviderNotAvailableError,
     ProviderUnavailableError,
     ResumeNotFoundError,
@@ -60,6 +61,17 @@ def _error(status_code: int, message: str) -> HTTPException:
     return HTTPException(
         status_code=status_code,
         detail={"success": False, "message": message},
+    )
+
+
+def _validation_error(exc: DocumentValidationError) -> HTTPException:
+    return HTTPException(
+        status_code=422,
+        detail={
+            "success": False,
+            "message": "Document validation failed.",
+            "issues": exc.issues,
+        },
     )
 
 
@@ -239,6 +251,8 @@ def download_cover_letter(
         raise _error(404, "Analysis not found.") from exc
     except AnalysisNotReadyError as exc:
         raise _error(409, "This analysis has no cover letter to download.") from exc
+    except DocumentValidationError as exc:
+        raise _validation_error(exc) from exc
 
     return Response(
         content=content,
@@ -277,6 +291,8 @@ def download_tailored_resume(
         raise _error(404, "Analysis not found.") from exc
     except AnalysisNotReadyError as exc:
         raise _error(409, "This analysis has no tailored resume to download.") from exc
+    except DocumentValidationError as exc:
+        raise _validation_error(exc) from exc
 
     return Response(
         content=content,
@@ -286,3 +302,115 @@ def download_tailored_resume(
         ),
         headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
     )
+
+
+@analyses_router.get(
+    "/{analysis_id}/tailored-cover-letter.pdf",
+    responses={
+        200: {
+            "content": {"application/pdf": {}},
+            "description": "Cover letter as a PDF attachment.",
+        }
+    },
+)
+def download_cover_letter_pdf(
+    analysis_id: str,
+    preview: bool = Query(False),
+    session: Session = Depends(get_db),
+    user: AuthUser = Depends(require_complete_profile),
+) -> Response:
+    if not _is_uuid(analysis_id):
+        raise _error(404, "Analysis not found.")
+    try:
+        file_name, content = service.cover_letter_pdf(
+            session,
+            analysis_id,
+            user.id,
+            enforce_validation=not preview,
+        )
+    except AnalysisNotFoundError as exc:
+        raise _error(404, "Analysis not found.") from exc
+    except AnalysisNotReadyError as exc:
+        raise _error(
+            409, "This analysis has no cover letter to download."
+        ) from exc
+    except DocumentValidationError as exc:
+        raise _validation_error(exc) from exc
+
+    disposition = "inline" if preview else "attachment"
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'{disposition}; filename="{file_name}"'
+            )
+        },
+    )
+
+
+@analyses_router.get(
+    "/{analysis_id}/tailored-resume.pdf",
+    responses={
+        200: {
+            "content": {"application/pdf": {}},
+            "description": "Tailored resume as a PDF attachment.",
+        }
+    },
+)
+def download_tailored_resume_pdf(
+    analysis_id: str,
+    preview: bool = Query(False),
+    session: Session = Depends(get_db),
+    user: AuthUser = Depends(require_complete_profile),
+) -> Response:
+    if not _is_uuid(analysis_id):
+        raise _error(404, "Analysis not found.")
+    try:
+        file_name, content = service.tailored_resume_pdf(
+            session,
+            analysis_id,
+            user.id,
+            enforce_validation=not preview,
+        )
+    except AnalysisNotFoundError as exc:
+        raise _error(404, "Analysis not found.") from exc
+    except AnalysisNotReadyError as exc:
+        raise _error(
+            409, "This analysis has no tailored resume to download."
+        ) from exc
+    except DocumentValidationError as exc:
+        raise _validation_error(exc) from exc
+
+    disposition = "inline" if preview else "attachment"
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'{disposition}; filename="{file_name}"'
+            )
+        },
+    )
+
+
+@analyses_router.get("/{analysis_id}/document-validation")
+def validate_document(
+    analysis_id: str,
+    ai_core: AICore = Depends(get_ai_core),
+    session: Session = Depends(get_db),
+    user: AuthUser = Depends(require_complete_profile),
+) -> dict:
+    if not _is_uuid(analysis_id):
+        raise _error(404, "Analysis not found.")
+    try:
+        report = service.validate_documents(
+            ai_core, session, analysis_id, user.id
+        )
+    except AnalysisNotFoundError as exc:
+        raise _error(404, "Analysis not found.") from exc
+    return {
+        "success": True,
+        "message": "Document validation completed.",
+        "data": report,
+    }
