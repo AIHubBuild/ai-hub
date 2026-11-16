@@ -237,10 +237,10 @@ def test_validation_reports_missing_sections_and_placeholders():
 import re
 from pathlib import Path
 
-import pytest
-
 REFERENCE_DIR = (
-    Path(__file__).resolve().parents[2] / "docs" / "reference-templates"
+    Path(__file__).resolve().parent
+    / "fixtures"
+    / "reference_templates"
 )
 
 
@@ -353,10 +353,12 @@ Bob Beta
 
 
 def test_reference_pdf_personal_data_does_not_leak():
-    cv_reference = REFERENCE_DIR / "preferred-cv.pdf"
-    cover_reference = REFERENCE_DIR / "preferred-cover-letter.pdf"
-    if not cv_reference.is_file() or not cover_reference.is_file():
-        pytest.skip("reference PDFs are not available")
+    cv_reference = REFERENCE_DIR / "sanitized-reference-cv.pdf"
+    cover_reference = (
+        REFERENCE_DIR / "sanitized-reference-cover-letter.pdf"
+    )
+    assert cv_reference.is_file()
+    assert cover_reference.is_file()
 
     profiles = [
         ("Alice Alpha", "alice@example.com", "+49 111 111111", "Berlin", "Alpha Corp", "Alpha University"),
@@ -434,6 +436,12 @@ Sincerely,
         if len(marker) >= 4 and marker.lower() not in {"profile"}
     }
     assert personal_markers
+    sanitized_sentinels = {
+        "Reference Employer LLC",
+        "Reference University",
+        "reference.person@example.test",
+        "+49 000 000000",
+    }
 
     for name, email, phone, city, employer, university in profiles:
         source, resume_text, cover_text = profile_documents(
@@ -453,7 +461,7 @@ Sincerely,
         )
         assert name in generated
         assert email in generated
-        for marker in personal_markers:
+        for marker in personal_markers | sanitized_sentinels:
             assert marker not in generated
 
 def test_source_contact_overrides_ai_header_contact():
