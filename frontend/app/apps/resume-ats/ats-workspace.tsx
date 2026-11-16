@@ -1,16 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../components/auth/auth-provider";
 import { ApiError } from "../../lib/api";
 import { DocumentTextIcon } from "../../components/icons";
 import {
   AtsAnalysisData,
+  DocumentValidationIssue,
+  DocumentValidationReport,
   RequirementEvidence,
   SUPPORTED_EXTENSIONS,
   downloadCoverLetterDocx,
+  downloadCoverLetterPdf,
   downloadTailoredResumeDocx,
+  downloadTailoredResumePdf,
+  fetchDocumentValidation,
+  previewCoverLetterPdf,
+  previewTailoredResumePdf,
   runAtsAnalysis,
   uploadResume,
 } from "../../lib/resume-ats";
@@ -30,8 +37,18 @@ export function AtsWorkspace() {
   const [styleNotes, setStyleNotes] = useState("");
   const [result, setResult] = useState<AtsAnalysisData | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingResumePdf, setDownloadingResumePdf] = useState(false);
   const [downloadingCoverLetter, setDownloadingCoverLetter] = useState(false);
+  const [downloadingCoverLetterPdf, setDownloadingCoverLetterPdf] =
+    useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [validation, setValidation] =
+    useState<DocumentValidationReport | null>(null);
+  const [validationLoading, setValidationLoading] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState("Document preview");
+  const [previewing, setPreviewing] = useState<"cv" | "cover" | null>(null);
   const [resultTab, setResultTab] = useState<ResultTab>("suggestions");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -40,6 +57,47 @@ export function AtsWorkspace() {
     stage !== "analyzing" &&
     fileName !== null &&
     jobDescription.trim().length > 0;
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      await Promise.resolve();
+      if (!active) return;
+      if (!result) {
+        setValidation(null);
+        setValidationError(null);
+        setValidationLoading(false);
+        return;
+      }
+      setValidationLoading(true);
+      setValidationError(null);
+      setValidation(null);
+      try {
+        const report = await fetchDocumentValidation(result.analysis_id);
+        if (active) setValidation(report);
+      } catch (caught) {
+        if (active) {
+          setValidationError(
+            caught instanceof ApiError
+              ? caught.message
+              : "Document validation could not be completed.",
+          );
+        }
+      } finally {
+        if (active) setValidationLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [result]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -99,6 +157,22 @@ export function AtsWorkspace() {
     }
   }
 
+  async function handleDownloadResumePdf() {
+    if (!result) return;
+    setDownloadingResumePdf(true);
+    setDownloadError(null);
+    try {
+      const blob = await downloadTailoredResumePdf(result.analysis_id);
+      triggerDownload(blob, "tailored-resume.pdf");
+    } catch (caught) {
+      setDownloadError(
+        caught instanceof Error ? caught.message : "PDF download failed.",
+      );
+    } finally {
+      setDownloadingResumePdf(false);
+    }
+  }
+
   async function handleDownloadCoverLetter() {
     if (!result) return;
     setDownloadingCoverLetter(true);
@@ -117,11 +191,64 @@ export function AtsWorkspace() {
     }
   }
 
+  async function handleDownloadCoverLetterPdf() {
+    if (!result) return;
+    setDownloadingCoverLetterPdf(true);
+    setDownloadError(null);
+    try {
+      const blob = await downloadCoverLetterPdf(result.analysis_id);
+      triggerDownload(blob, "tailored-cover-letter.pdf");
+    } catch (caught) {
+      setDownloadError(
+        caught instanceof Error
+          ? caught.message
+          : "Cover letter PDF download failed.",
+      );
+    } finally {
+      setDownloadingCoverLetterPdf(false);
+    }
+  }
+
+  async function handlePreview(kind: "cv" | "cover") {
+    if (!result) return;
+    setPreviewing(kind);
+    setDownloadError(null);
+    try {
+      const blob =
+        kind === "cv"
+          ? await previewTailoredResumePdf(result.analysis_id)
+          : await previewCoverLetterPdf(result.analysis_id);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(blob));
+      setPreviewTitle(
+        kind === "cv" ? "CV preview" : "Cover letter preview",
+      );
+    } catch (caught) {
+      setDownloadError(
+        caught instanceof Error
+          ? caught.message
+          : "Document preview failed.",
+      );
+    } finally {
+      setPreviewing(null);
+    }
+  }
+
   function reset() {
     setStage("idle");
     setError(null);
     setErrorIsAuth(false);
     setDownloadError(null);
+    setDownloading(false);
+    setDownloadingResumePdf(false);
+    setDownloadingCoverLetter(false);
+    setDownloadingCoverLetterPdf(false);
+    setPreviewing(null);
+    setValidation(null);
+    setValidationError(null);
+    setValidationLoading(false);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
     setResult(null);
     setResultTab("suggestions");
     setFileName(null);
@@ -134,6 +261,14 @@ export function AtsWorkspace() {
 
   const coverLetterText = (result?.cover_letter ?? "").trim();
   const hasCoverLetter = coverLetterText.length > 0;
+  const cvValidation = validation?.documents.cv ?? null;
+  const coverValidation = validation?.documents.cover_letter ?? null;
+  const cvReady = Boolean(
+    cvValidation && cvValidation.blocking_issues.length === 0,
+  );
+  const coverReady = Boolean(
+    coverValidation && coverValidation.blocking_issues.length === 0,
+  );
 
   const scoreTone =
     (result?.ats_score ?? 0) >= 75
@@ -579,9 +714,30 @@ export function AtsWorkspace() {
                 }
                 onTabChange={setResultTab}
                 downloading={downloading}
+                downloadingResumePdf={downloadingResumePdf}
                 downloadingCoverLetter={downloadingCoverLetter}
+                downloadingCoverLetterPdf={downloadingCoverLetterPdf}
                 onDownload={handleDownload}
+                onDownloadResumePdf={handleDownloadResumePdf}
                 onDownloadCoverLetter={handleDownloadCoverLetter}
+                onDownloadCoverLetterPdf={handleDownloadCoverLetterPdf}
+                cvReady={cvReady}
+                coverReady={coverReady}
+                validationLoading={validationLoading}
+                validationError={validationError}
+                cvWarnings={cvValidation?.warnings ?? []}
+                coverWarnings={coverValidation?.warnings ?? []}
+                cvBlockingIssues={cvValidation?.blocking_issues ?? []}
+                coverBlockingIssues={coverValidation?.blocking_issues ?? []}
+                previewing={previewing}
+                previewUrl={previewUrl}
+                previewTitle={previewTitle}
+                onPreviewCv={() => handlePreview("cv")}
+                onPreviewCover={() => handlePreview("cover")}
+                onClosePreview={() => {
+                  if (previewUrl) URL.revokeObjectURL(previewUrl);
+                  setPreviewUrl(null);
+                }}
               />
             )}
 
@@ -590,7 +746,7 @@ export function AtsWorkspace() {
                 role="alert"
                 className="mt-5 border-l-2 border-danger bg-surface-muted px-4 py-3 text-sm leading-6 text-ink-soft"
               >
-                {downloadError}
+                <p>{downloadError}</p>
               </div>
             )}
 
@@ -729,22 +885,126 @@ function EvidenceSection({
   );
 }
 
+function ValidationMessages({
+  loading,
+  error,
+  blockingIssues,
+  warnings,
+}: {
+  loading: boolean;
+  error: string | null;
+  blockingIssues: DocumentValidationIssue[];
+  warnings: DocumentValidationIssue[];
+}) {
+  if (loading) {
+    return (
+      <p className="mt-4 text-sm text-muted">
+        Validating document structure, pagination and copy…
+      </p>
+    );
+  }
+  if (error) {
+    return (
+      <p
+        role="alert"
+        className="mt-4 border-l-2 border-danger bg-surface-muted px-3 py-2 text-sm text-ink-soft"
+      >
+        {error}
+      </p>
+    );
+  }
+  if (blockingIssues.length === 0 && warnings.length === 0) {
+    return null;
+  }
+  return (
+    <div className="mt-4 space-y-3 text-sm leading-6">
+      {blockingIssues.length > 0 && (
+        <div
+          role="alert"
+          className="border-l-2 border-danger bg-surface-muted px-3 py-2 text-ink-soft"
+        >
+          <p className="font-medium text-ink">
+            Downloads are disabled until these issues are resolved:
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {blockingIssues.map((issue, index) => (
+              <li key={`${issue.code}-${index}`}>{issue.message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {warnings.length > 0 && (
+        <details className="border-l-2 border-line bg-surface-muted px-3 py-2 text-ink-soft">
+          <summary className="cursor-pointer font-medium text-ink">
+            Copy review suggestions
+          </summary>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {warnings.map((issue, index) => (
+              <li key={`${issue.code}-${index}`}>
+                {issue.message}
+                {issue.excerpt ? ` (“${issue.excerpt}”)` : ""}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+
 function AiOutputPanel({
   result,
   activeTab,
   onTabChange,
   downloading,
+  downloadingResumePdf,
   downloadingCoverLetter,
+  downloadingCoverLetterPdf,
   onDownload,
+  onDownloadResumePdf,
   onDownloadCoverLetter,
+  onDownloadCoverLetterPdf,
+  cvReady,
+  coverReady,
+  validationLoading,
+  validationError,
+  cvWarnings,
+  coverWarnings,
+  cvBlockingIssues,
+  coverBlockingIssues,
+  previewing,
+  previewUrl,
+  previewTitle,
+  onPreviewCv,
+  onPreviewCover,
+  onClosePreview,
 }: {
   result: AtsAnalysisData;
   activeTab: ResultTab;
   onTabChange: (tab: ResultTab) => void;
   downloading: boolean;
+  downloadingResumePdf: boolean;
   downloadingCoverLetter: boolean;
+  downloadingCoverLetterPdf: boolean;
   onDownload: () => void;
+  onDownloadResumePdf: () => void;
   onDownloadCoverLetter: () => void;
+  onDownloadCoverLetterPdf: () => void;
+  cvReady: boolean;
+  coverReady: boolean;
+  validationLoading: boolean;
+  validationError: string | null;
+  cvWarnings: DocumentValidationIssue[];
+  coverWarnings: DocumentValidationIssue[];
+  cvBlockingIssues: DocumentValidationIssue[];
+  coverBlockingIssues: DocumentValidationIssue[];
+  previewing: "cv" | "cover" | null;
+  previewUrl: string | null;
+  previewTitle: string;
+  onPreviewCv: () => void;
+  onPreviewCover: () => void;
+  onClosePreview: () => void;
 }) {
   const tabs: { id: ResultTab; label: string; visible: boolean }[] = [
     {
@@ -803,15 +1063,43 @@ function AiOutputPanel({
             <div className="whitespace-pre-wrap text-sm leading-7 text-ink-soft">
               {result.tailored_resume}
             </div>
-            <div className="mt-5 flex justify-end border-t border-line pt-4">
+            <ValidationMessages
+              loading={validationLoading}
+              error={validationError}
+              blockingIssues={cvBlockingIssues}
+              warnings={cvWarnings}
+            />
+            <div className="mt-5 flex flex-wrap justify-end gap-3 border-t border-line pt-4">
+              <button
+                type="button"
+                onClick={onPreviewCv}
+                disabled={previewing !== null}
+                aria-label="Preview tailored resume as a PDF"
+                className="ui-button ui-button-secondary"
+              >
+                {previewing === "cv"
+                  ? "Preparing preview…"
+                  : "Preview PDF"}
+              </button>
               <button
                 type="button"
                 onClick={onDownload}
-                disabled={downloading}
+                disabled={downloading || !cvReady}
                 aria-label="Download tailored resume as a DOCX file"
                 className="ui-button ui-button-primary"
               >
                 {downloading ? "Preparing DOCX…" : "Download DOCX"}
+              </button>
+              <button
+                type="button"
+                onClick={onDownloadResumePdf}
+                disabled={downloadingResumePdf || !cvReady}
+                aria-label="Download tailored resume as a PDF file"
+                className="ui-button ui-button-secondary"
+              >
+                {downloadingResumePdf
+                  ? "Preparing PDF…"
+                  : "Download PDF"}
               </button>
             </div>
           </>
@@ -821,18 +1109,65 @@ function AiOutputPanel({
             <div className="whitespace-pre-wrap text-sm leading-7 text-ink-soft">
               {result.cover_letter}
             </div>
-            <div className="mt-5 flex justify-end border-t border-line pt-4">
+            <ValidationMessages
+              loading={validationLoading}
+              error={validationError}
+              blockingIssues={coverBlockingIssues}
+              warnings={coverWarnings}
+            />
+            <div className="mt-5 flex flex-wrap justify-end gap-3 border-t border-line pt-4">
+              <button
+                type="button"
+                onClick={onPreviewCover}
+                disabled={previewing !== null}
+                aria-label="Preview cover letter as a PDF"
+                className="ui-button ui-button-secondary"
+              >
+                {previewing === "cover"
+                  ? "Preparing preview…"
+                  : "Preview PDF"}
+              </button>
               <button
                 type="button"
                 onClick={onDownloadCoverLetter}
-                disabled={downloadingCoverLetter}
+                disabled={downloadingCoverLetter || !coverReady}
                 aria-label="Download cover letter as a DOCX file"
                 className="ui-button ui-button-secondary"
               >
                 {downloadingCoverLetter ? "Preparing DOCX…" : "Download DOCX"}
               </button>
+              <button
+                type="button"
+                onClick={onDownloadCoverLetterPdf}
+                disabled={downloadingCoverLetterPdf || !coverReady}
+                aria-label="Download cover letter as a PDF file"
+                className="ui-button ui-button-secondary"
+              >
+                {downloadingCoverLetterPdf
+                  ? "Preparing PDF…"
+                  : "Download PDF"}
+              </button>
             </div>
           </>
+        )}
+        {previewUrl && (
+          <div className="mt-5 overflow-hidden rounded-2xl border border-line bg-surface">
+            <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+              <p className="text-sm font-medium text-ink">{previewTitle}</p>
+              <button
+                type="button"
+                onClick={onClosePreview}
+                className="text-sm font-medium text-muted underline underline-offset-2"
+              >
+                Close preview
+              </button>
+            </div>
+            <iframe
+              src={previewUrl}
+              title={previewTitle}
+              className="h-[70vh] w-full bg-white"
+            />
+          </div>
         )}
       </div>
     </section>

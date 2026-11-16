@@ -100,3 +100,25 @@ def test_without_headings_everything_is_essential():
 
     assert "We need Docker and Kubernetes experience." in sections["essential"]
     assert sections["preferred"] == []
+
+
+def test_long_closing_paragraph_warns_even_when_length_is_sufficient():
+    closing = (
+        "We look forward to receiving your application. Thank you for your "
+        "interest in this opportunity. Only shortlisted candidates will be "
+        "contacted by our team."
+    )
+
+    assert describe_warning(closing, strip_boilerplate(closing)) is not None
+
+
+def test_description_without_role_requirements_warns():
+    text = (
+        "We are a friendly company with a collaborative culture and a modern "
+        "office. We offer flexible working and a comprehensive benefits package."
+    )
+
+    warning = describe_warning(text, strip_boilerplate(text))
+
+    assert warning is not None
+    assert "requirements" in warning.lower() or "complete" in warning.lower()

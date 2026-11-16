@@ -31,6 +31,12 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
 DEFAULT_MAX_SIZE_BYTES = 5 * 1024 * 1024
 
+_MARKDOWN_HEADING = re.compile(r"^\s*#{1,6}\s*")
+_MARKDOWN_EMPHASIS = re.compile(r"\*\*|__")
+_MARKDOWN_STAR = re.compile(r"(?<!\*)\*(?!\*)")
+_DECORATIVE_LINE = re.compile(r"^\s*(?:---+|___+|\*\*\*+)\s*$")
+_BULLET_LINE = re.compile(r"^\s*[-*•]\s+")
+
 # Section headings recognized when rendering a plain-text tailored
 # resume into DOCX. Compared case-insensitively after light cleanup.
 SECTION_HEADINGS = {
@@ -81,33 +87,46 @@ def extract_text(filename: str, data: bytes, max_size_bytes: int = DEFAULT_MAX_S
     return text.strip()
 
 
-def build_tailored_resume_docx(text: str) -> bytes:
-    """Render plain-text tailored resume content as a DOCX document.
+def _clean_generated_line(line: str) -> str:
+    """Remove Markdown/decorative markers without changing facts."""
+    cleaned = _MARKDOWN_HEADING.sub("", line.strip())
+    cleaned = _MARKDOWN_EMPHASIS.sub("", cleaned)
+    cleaned = _MARKDOWN_STAR.sub("", cleaned)
+    return cleaned.strip()
 
-    Simple, deterministic styling: the first non-empty line becomes the
-    document title, recognized section lines become headings, contact
-    and date lines are preserved as plain body paragraphs, and all
-    other lines become body paragraphs (bullet glyphs are stripped).
-    """
+
+def _is_decorative_line(line: str) -> bool:
+    return _DECORATIVE_LINE.match(line.strip()) is not None
+
+
+def build_tailored_resume_docx(text: str) -> bytes:
+    """Render tailored resume text with clean, conventional DOCX formatting."""
     document = DocxDocument()
 
-    lines = [line.strip() for line in text.splitlines()]
     first = True
-    for line in lines:
+    for raw_line in text.splitlines():
+        if not raw_line.strip() or _is_decorative_line(raw_line):
+            continue
+        is_bullet = _BULLET_LINE.match(raw_line) is not None
+        line = _clean_generated_line(raw_line)
         if not line:
             continue
         if _is_contact_or_date_line(line):
             _append_paragraph(document, line, bold=False, size_pt=11)
             continue
-        cleaned = line.lstrip("•-*").strip()
         if first:
             first = False
-            _append_paragraph(document, cleaned, bold=True, size_pt=20)
+            _append_paragraph(document, line, bold=True, size_pt=20)
             continue
-        if _is_section_heading(cleaned):
-            _append_paragraph(document, cleaned, bold=True, size_pt=14)
+        if _is_section_heading(line):
+            _append_paragraph(document, line, bold=True, size_pt=14)
             continue
-        _append_paragraph(document, cleaned, bold=False, size_pt=11)
+        if is_bullet:
+            line = _BULLET_LINE.sub("", line).strip()
+            if line:
+                document.add_paragraph(line, style="List Bullet")
+            continue
+        _append_paragraph(document, line, bold=False, size_pt=11)
 
     buffer = BytesIO()
     document.save(buffer)
@@ -124,19 +143,15 @@ def validate_docx(content: bytes) -> bool:
 
 
 def build_cover_letter_docx(text: str) -> bytes:
-    """Render plain-text cover-letter content as a DOCX document.
-
-    The letter's wording is preserved exactly: every non-empty line
-    becomes a paragraph in order (blank lines create spacing). No
-    heuristics invent contact details, dates, or headings — the letter
-    is rendered as generated during the analysis.
-    """
+    """Render cover-letter text as conventional professional paragraphs."""
     document = DocxDocument()
 
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped:
-            _append_paragraph(document, stripped, bold=False, size_pt=11)
+    for raw_line in text.splitlines():
+        if _is_decorative_line(raw_line):
+            continue
+        line = _clean_generated_line(raw_line)
+        if line:
+            _append_paragraph(document, line, bold=False, size_pt=11)
         else:
             document.add_paragraph()
 

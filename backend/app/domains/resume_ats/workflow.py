@@ -35,7 +35,11 @@ from app.domains.resume_ats.job_description import (
 )
 from app.domains.resume_ats.matching import analyze_job_match
 from app.domains.resume_ats.schemas import AtsAnalysisResult, RequirementEvidence
-from app.domains.resume_ats.writing_review import applicant_name, review_writing
+from app.domains.resume_ats.writing_review import (
+    applicant_name,
+    repair_unsupported_outcomes,
+    review_writing,
+)
 
 ATS_WORKFLOW_ID = "resume_ats/ats_pipeline"
 MAX_REVISION_PASSES = 2
@@ -259,10 +263,26 @@ def make_review_and_revise_node(
         if tailored_resume:
             for _ in range(MAX_REVISION_PASSES):
                 resume_review = review_writing(
-                    resume_source, tailored_resume, None
+                    resume_source,
+                    tailored_resume,
+                    None,
+                    job_description=state.get("job_description", ""),
                 )
                 if resume_review.passed:
                     break
+                repaired, changed = repair_unsupported_outcomes(
+                    tailored_resume, resume_source
+                )
+                if changed:
+                    tailored_resume = repaired
+                    resume_review = review_writing(
+                        resume_source,
+                        tailored_resume,
+                        None,
+                        job_description=state.get("job_description", ""),
+                    )
+                    if resume_review.passed:
+                        break
                 template = prompts.get(PROMPT_IDS["tailored_resume"])
                 revision = _revision_instructions(
                     "tailored resume",
@@ -279,15 +299,39 @@ def make_review_and_revise_node(
                 tailored_resume = _ensure_applicant_name(
                     "tailored resume", tailored_resume, resume_source
                 )
+            # The model may still leave an unsupported outcome after the
+            # final pass. Remove only that clause rather than returning a
+            # knowingly unsupported claim.
+            tailored_resume, _ = repair_unsupported_outcomes(
+                tailored_resume, resume_source
+            )
             updates["tailored_resume"] = tailored_resume
 
         if cover_letter:
             for _ in range(MAX_REVISION_PASSES):
                 cover_review = review_writing(
-                    resume_source, None, cover_letter
+                    resume_source,
+                    None,
+                    cover_letter,
+                    job_description=state.get("job_description", ""),
                 )
                 if cover_review.passed:
                     break
+                repaired, changed = repair_unsupported_outcomes(
+                    cover_letter,
+                    resume_source,
+                    drop_unrepairable=False,
+                )
+                if changed:
+                    cover_letter = repaired
+                    cover_review = review_writing(
+                        resume_source,
+                        None,
+                        cover_letter,
+                        job_description=state.get("job_description", ""),
+                    )
+                    if cover_review.passed:
+                        break
                 template = prompts.get(PROMPT_IDS["cover_letter"])
                 revision = _revision_instructions(
                     "cover letter",
@@ -306,6 +350,11 @@ def make_review_and_revise_node(
                 cover_letter = _ensure_applicant_name(
                     "cover letter", cover_letter, resume_source
                 )
+            cover_letter, _ = repair_unsupported_outcomes(
+                cover_letter,
+                resume_source,
+                drop_unrepairable=False,
+            )
             updates["cover_letter"] = cover_letter
 
         return updates

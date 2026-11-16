@@ -33,7 +33,14 @@ from app.domains.resume_ats.schemas import (
 from app.domains.resume_ats.workflow import ATS_WORKFLOW_ID, result_from_state
 from app.domains.resume_ats.writing_review import review_writing
 from app.models.resume import AtsAnalysisRecord, Resume
-from app.services import documents
+from app.services import document_templates, documents
+from app.services.document_content import (
+    parse_cover_letter,
+    parse_resume,
+)
+from app.services.document_validation import (
+    validate_generated_documents,
+)
 
 DOMAIN = "resume_ats"
 
@@ -56,6 +63,14 @@ class ProviderUnavailableError(RuntimeError):
 
 class AnalysisNotReadyError(ValueError):
     """An analysis exists but has no tailored resume to download."""
+
+
+class DocumentValidationError(ValueError):
+    """A generated document failed structural, page, or quality checks."""
+
+    def __init__(self, issues: list[dict]):
+        super().__init__("Document validation failed.")
+        self.issues = issues
 
 
 def upload_resume(
@@ -152,7 +167,10 @@ def run_ats_analysis(
 
     result = result_from_state(run.output_state)
     review = review_writing(
-        resume.extracted_text, result.tailored_resume, result.cover_letter
+        resume.extracted_text,
+        result.tailored_resume,
+        result.cover_letter,
+        job_description=job_description,
     )
     result.writing_review = WritingReviewSchema(
         passed=review.passed,
@@ -205,20 +223,105 @@ def latest_analysis(session: Session, resume_id: str) -> AtsAnalysisRecord | Non
     )
 
 
+def _analysis_and_resume(
+    session: Session, analysis_id: str, user_id: str
+) -> tuple[AtsAnalysisRecord, Resume]:
+    analysis = get_analysis(session, analysis_id, user_id)
+    resume = session.get(Resume, analysis.resume_id)
+    if resume is None:
+        raise AnalysisNotFoundError(analysis_id)
+    return analysis, resume
+
+
+def _assert_download_ready(
+    *,
+    cv_text: str,
+    cover_letter_text: str,
+    source_text: str,
+    document: str,
+) -> None:
+    report = validate_generated_documents(
+        cv_text=cv_text,
+        cover_letter_text=cover_letter_text,
+        source_text=source_text,
+        include_ai_review=False,
+    )
+    blocking = report["documents"][document]["blocking_issues"]
+    if blocking:
+        raise DocumentValidationError(blocking)
+
+
+def validate_documents(
+    ai_core: AICore,
+    session: Session,
+    analysis_id: str,
+    user_id: str,
+) -> dict:
+    """Return validation and AI review for both generated documents."""
+    analysis, resume = _analysis_and_resume(
+        session, analysis_id, user_id
+    )
+    return validate_generated_documents(
+        cv_text=analysis.tailored_resume or "",
+        cover_letter_text=analysis.cover_letter or "",
+        source_text=resume.extracted_text,
+        ai_core=ai_core,
+        include_ai_review=True,
+    )
+
+
 def tailored_resume_docx(
     session: Session, analysis_id: str, user_id: str
 ) -> tuple[str, bytes]:
-    """Render the tailored resume of an analysis as DOCX bytes.
-
-    Returns (file_name, bytes). Raises AnalysisNotReadyError when the
-    analysis has no tailored resume (e.g. the AI run failed).
-    """
-    analysis = get_analysis(session, analysis_id, user_id)
+    """Render the tailored resume of an analysis as DOCX bytes."""
+    analysis, resume = _analysis_and_resume(
+        session, analysis_id, user_id
+    )
     if not analysis.tailored_resume:
         raise AnalysisNotReadyError(analysis_id)
+    _assert_download_ready(
+        cv_text=analysis.tailored_resume,
+        cover_letter_text=analysis.cover_letter or "",
+        source_text=resume.extracted_text,
+        document="cv",
+    )
+    document = parse_resume(
+        analysis.tailored_resume,
+        source_text=resume.extracted_text,
+    )
     return (
         "tailored-resume.docx",
-        documents.build_tailored_resume_docx(analysis.tailored_resume),
+        document_templates.render_resume_docx(document),
+    )
+
+
+def tailored_resume_pdf(
+    session: Session,
+    analysis_id: str,
+    user_id: str,
+    *,
+    enforce_validation: bool = True,
+) -> tuple[str, bytes]:
+    """Render the tailored resume of an analysis as A4 PDF bytes."""
+    analysis, resume = _analysis_and_resume(
+        session, analysis_id, user_id
+    )
+    if not analysis.tailored_resume:
+        raise AnalysisNotReadyError(analysis_id)
+    if enforce_validation:
+        _assert_download_ready(
+            cv_text=analysis.tailored_resume,
+            cover_letter_text=analysis.cover_letter or "",
+            source_text=resume.extracted_text,
+            document="cv",
+        )
+    document = parse_resume(
+        analysis.tailored_resume,
+        source_text=resume.extracted_text,
+    )
+    return (
+        "tailored-resume.pdf",
+        document_templates.render_resume_pdf(document),
     )
 
 
@@ -227,14 +330,55 @@ def cover_letter_docx(
 ) -> tuple[str, bytes]:
     """Render the cover letter of an analysis as DOCX bytes.
 
-    Returns (file_name, bytes). The wording is the letter generated
-    during the analysis — the download never regenerates or alters it.
-    Raises AnalysisNotReadyError when the analysis has no cover letter.
+    The wording is the letter generated during the analysis — the download
+    never regenerates or alters it.
     """
-    analysis = get_analysis(session, analysis_id, user_id)
+    analysis, resume = _analysis_and_resume(
+        session, analysis_id, user_id
+    )
     if not analysis.cover_letter:
         raise AnalysisNotReadyError(analysis_id)
+    _assert_download_ready(
+        cv_text=analysis.tailored_resume or "",
+        cover_letter_text=analysis.cover_letter,
+        source_text=resume.extracted_text,
+        document="cover_letter",
+    )
+    document = parse_cover_letter(
+        analysis.cover_letter,
+        source_text=resume.extracted_text,
+    )
     return (
         "tailored-cover-letter.docx",
-        documents.build_cover_letter_docx(analysis.cover_letter),
+        document_templates.render_cover_letter_docx(document),
+    )
+
+
+def cover_letter_pdf(
+    session: Session,
+    analysis_id: str,
+    user_id: str,
+    *,
+    enforce_validation: bool = True,
+) -> tuple[str, bytes]:
+    """Render the cover letter of an analysis as A4 PDF bytes."""
+    analysis, resume = _analysis_and_resume(
+        session, analysis_id, user_id
+    )
+    if not analysis.cover_letter:
+        raise AnalysisNotReadyError(analysis_id)
+    if enforce_validation:
+        _assert_download_ready(
+            cv_text=analysis.tailored_resume or "",
+            cover_letter_text=analysis.cover_letter,
+            source_text=resume.extracted_text,
+            document="cover_letter",
+        )
+    document = parse_cover_letter(
+        analysis.cover_letter,
+        source_text=resume.extracted_text,
+    )
+    return (
+        "tailored-cover-letter.pdf",
+        document_templates.render_cover_letter_pdf(document),
     )

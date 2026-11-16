@@ -113,28 +113,165 @@ COMMUNICATION_PHRASES = [
 
 # Conservative synonym groups (canonical term -> recognized variants).
 SYNONYMS: dict[str, list[str]] = {
-    "microsoft 365": ["office 365", "m365"],
-    "active directory": ["active directory services"],
-    "entra id": ["azure active directory"],
     "intune": ["microsoft intune", "endpoint manager"],
-    "vpn": ["virtual private network"],
-    "dns": ["domain name system"],
     "dhcp": ["dynamic host configuration protocol"],
-    "tcp/ip": ["tcp ip"],
-    "sla": ["service level agreement"],
-    "technical support": ["help desk", "helpdesk", "it support"],
+    "technical support": [
+        "help desk",
+        "helpdesk",
+        "it support",
+        "it-support",
+        "service desk",
+        "user support",
+    ],
+    "incident management": [
+        "incident handling",
+        "incident resolution",
+        "incident diagnosis",
+        "ticket management",
+        "ticket handling",
+        "ticket intake",
+    ],
+    "endpoint management": ["device management", "endpoint administration"],
+    "user provisioning": ["account provisioning", "user onboarding"],
+    "problem-solving": [
+        "problem solving",
+        "troubleshooting",
+        "troubleshoot",
+        "diagnose",
+        "diagnosis",
+        "resolve",
+        "resolution",
+        "root cause",
+    ],
+    "communication skills": [
+        "communication",
+        "communicate",
+        "clear communication",
+        "user communication",
+        "written communication",
+        "verbal communication",
+    ],
+    "collaboration": [
+        "collaborate",
+        "collaborating",
+        "cooperate",
+        "work with senior",
+        "escalate to senior",
+    ],
+    "documentation": [
+        "document",
+        "documented",
+        "documenting",
+        "knowledge base",
+        "knowledge-base",
+    ],
+    "troubleshooting": [
+        "troubleshoot",
+        "diagnose",
+        "diagnosis",
+        "problem solving",
+        "problem-solving",
+        "fault diagnosis",
+    ],
+    "windows": ["windows 10", "windows 11", "windows server"],
+    "microsoft 365": ["m365", "office 365", "microsoft-365"],
+    "active directory": ["ad", "active-directory"],
+    "entra id": ["azure ad", "azure active directory", "entra-id"],
+    "vpn": ["virtual private network", "vpn access"],
+    "dns": ["domain name system", "dns resolution"],
+    "tcp/ip": ["tcp ip", "tcp-ip", "ip networking"],
+    "sla": ["service level agreement", "service-level agreement"],
+    "ticketing": ["ticket system", "ticket management", "ticket processing"],
 }
+
+LANGUAGE_LEVELS = {
+    "a1": 1,
+    "a2": 2,
+    "b1": 3,
+    "b2": 4,
+    "c1": 5,
+    "c2": 6,
+    "basic": 2,
+    "conversational": 3,
+    "intermediate": 3,
+    "business": 4,
+    "advanced": 5,
+    "proficient": 5,
+    "fluent": 5,
+    "native": 6,
+}
+_LANGUAGE_NAMES = (
+    "english",
+    "german",
+    "french",
+    "spanish",
+    "italian",
+    "dutch",
+    "portuguese",
+    "polish",
+    "czech",
+    "swedish",
+    "danish",
+    "norwegian",
+    "finnish",
+    "turkish",
+    "arabic",
+    "mandarin",
+    "chinese",
+)
+_LANGUAGE_LEVEL_RE = re.compile(
+    r"\b(" + "|".join(_LANGUAGE_NAMES) + r")\b"
+    r"[^\n]{0,40}?\b(" + "|".join(LANGUAGE_LEVELS) + r")\b",
+    re.IGNORECASE,
+)
+_LEVEL_LANGUAGE_RE = re.compile(
+    r"\b(" + "|".join(LANGUAGE_LEVELS) + r")\b"
+    r"[^\n]{0,20}?\b(" + "|".join(_LANGUAGE_NAMES) + r")\b",
+    re.IGNORECASE,
+)
+_LANGUAGE_ONLY_RE = re.compile(
+    r"\b(" + "|".join(_LANGUAGE_NAMES) + r")\b", re.IGNORECASE
+)
 
 MAX_EVIDENCE_LINES = 3
 EVIDENCE_LINE_LENGTH = 220
 
 _SORTED_KEYWORDS = sorted(TECH_KEYWORDS, key=lambda term: (-len(term), term))
 
+_SEPARATOR_RE = re.compile(r"[\-\u2010\u2011\u2012\u2013\u2014\u2015/]+")
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _normalize_text(text: str) -> str:
+    """Lowercase and normalise punctuation used in technical terms.
+
+    Hyphens and slashes are treated as spaces so that ``IT-Support``,
+    ``IT Support`` and ``problem-solving`` / ``problem solving`` compare
+    consistently without changing the displayed requirement text.
+    """
+    lowered = text.lower()
+    lowered = _SEPARATOR_RE.sub(" ", lowered)
+    return _WHITESPACE_RE.sub(" ", lowered).strip()
+
+
+def _contains_term(normalized_haystack: str, term: str) -> bool:
+    """Word-boundary containment for an already-normalised haystack."""
+    normalized_term = _normalize_text(term)
+    if not normalized_term:
+        return False
+    pattern = r"(?<![a-z0-9])" + re.escape(normalized_term) + r"(?![a-z0-9])"
+    return re.search(pattern, normalized_haystack) is not None
+
+
 _ACTION_RE = re.compile(
-    r"\b(?:administered|built|configured|coordinated|created|"
-    r"delivered|deployed|designed|developed|documented|ensured|handled|"
-    r"implemented|installed|led|maintained|managed|migrated|monitored|"
-    r"provided|resolved|secured|supported|trained|troubleshot|upgraded)\b",
+    r"\b(?:administered|administer|assisted|built|communicated|configured|"
+    r"configure|coordinated|created|delivered|deployed|designed|developed|"
+    r"diagnosed|diagnose|documented|document|ensured|ensure|escalated|"
+    r"escalate|handled|handle|implemented|installed|install|led|maintained|"
+    r"maintain|managed|migrated|monitored|onboarded|offboarded|prioritized|"
+    r"prioritize|processed|process|provided|provide|replaced|replace|"
+    r"resolved|resolve|secured|supported|support|trained|train|"
+    r"troubleshot|troubleshoot|upgraded|use|used|using)\b",
     re.IGNORECASE,
 )
 
@@ -148,13 +285,22 @@ _OUTCOME_RE = re.compile(
 
 _QUALIFICATION_RE = re.compile(
     r"\b(?:degree|bachelor|master|bsc|msc|ba|ma|phd|diploma|certification|"
-    r"certified|certificate|accredited)\b",
+    r"certified|certificate|accredited|qualification|qualifications|"
+    r"education|training)\b",
     re.IGNORECASE,
 )
 
 _COMMUNICATION_RE = re.compile(
     r"\b(?:communication|collaboration|interpersonal|teamwork|customer "
-    r"service|stakeholder|presentation|written|verbal)\b",
+    r"service|stakeholder|presentation|written|verbal|user support|"
+    r"client support|training|documentation)\b",
+    re.IGNORECASE,
+)
+
+_PREFERRED_INLINE_RE = re.compile(
+    r"\b(?:is an advantage|are an advantage|advantageous|nice to have|"
+    r"would be a plus|is a plus|bonus|von vorteil|wunschenswert|"
+    r"wünschenswert)\b",
     re.IGNORECASE,
 )
 
@@ -194,14 +340,17 @@ _DATE_RANGE_RE = re.compile(
 )
 
 _REQUIREMENT_STOPWORDS = set(STOPWORDS) | {
-    "ability", "able", "accredited", "background", "bachelor", "certification",
-    "certified", "collaboration", "communication", "configure", "degree",
-    "deliver", "demonstrated", "document", "experience", "familiar",
-    "familiarity", "knowledge", "maintain", "manage", "master", "must",
-    "proficiency", "proficient", "proven", "qualification", "required",
-    "requirement", "requirements", "resolve", "responsibilities",
-    "responsibility", "skills", "support", "track", "record", "troubleshoot",
-    "year", "years",
+    "ability", "able", "accredited", "administration", "administrator",
+    "administrators", "background", "bachelor", "certification", "certified",
+    "collaboration", "communication", "configuration", "configure",
+    "degree", "deliver", "demonstrated", "document", "escalation",
+    "experience", "familiar", "familiarity", "knowledge", "maintain",
+    "maintenance", "manage", "master", "must", "permission", "permissions",
+    "prioritization", "process", "processing", "proficiency", "proficient",
+    "proven", "qualification", "replacement", "replace", "required",
+    "requirement", "requirements", "resolution", "resolve",
+    "responsibilities", "responsibility", "skills", "support", "track",
+    "record", "troubleshoot", "year", "years",
 }
 
 
@@ -309,16 +458,92 @@ class JobMatchAnalysis:
         ]
 
 
+_WORD_ALIASES = {
+    "administration": "administr",
+    "administer": "administr",
+    "administered": "administr",
+    "administrator": "administr",
+    "administrators": "administr",
+    "configuration": "configur",
+    "configure": "configur",
+    "configured": "configur",
+    "configuring": "configur",
+    "replacement": "replac",
+    "replace": "replac",
+    "replaced": "replac",
+    "replacing": "replac",
+    "maintenance": "maintain",
+    "maintain": "maintain",
+    "maintained": "maintain",
+    "maintaining": "maintain",
+    "diagnosis": "diagnos",
+    "diagnose": "diagnos",
+    "diagnosed": "diagnos",
+    "diagnosing": "diagnos",
+    "resolution": "resolv",
+    "resolve": "resolv",
+    "resolved": "resolv",
+    "resolving": "resolv",
+    "communication": "communicat",
+    "communicate": "communicat",
+    "communicating": "communicat",
+    "collaboration": "collaborat",
+    "collaborate": "collaborat",
+    "collaborating": "collaborat",
+    "documentation": "document",
+    "document": "document",
+    "documented": "document",
+    "documenting": "document",
+    "escalation": "escalat",
+    "escalate": "escalat",
+    "escalated": "escalat",
+    "escalating": "escalat",
+    "prioritization": "prioritiz",
+    "prioritisation": "prioritiz",
+    "prioritize": "prioritiz",
+    "prioritise": "prioritiz",
+    "prioritized": "prioritiz",
+    "prioritised": "prioritiz",
+    "prioritizing": "prioritiz",
+    "organisation": "organiz",
+    "organization": "organiz",
+    "setup": "configur",
+    "set": "configur",
+    "troubleshooting": "troubleshoot",
+    "troubleshoot": "troubleshoot",
+    "troubleshot": "troubleshoot",
+    "installation": "instal",
+    "install": "instal",
+    "installed": "instal",
+    "installing": "instal",
+    "provisioning": "provision",
+    "provision": "provision",
+    "provisioned": "provision",
+    "processing": "process",
+    "process": "process",
+    "processed": "process",
+    "permissions": "permission",
+    "permission": "permission",
+    "operations": "operat",
+    "operation": "operat",
+    "operate": "operat",
+    "operating": "operat",
+}
+
+
 def _stem(word: str) -> str:
+    if word in _WORD_ALIASES:
+        return _WORD_ALIASES[word]
     for suffix in ("ing", "ed", "es", "s"):
         if len(word) > 4 and word.endswith(suffix):
-            return word[: -len(suffix)]
-    return word
+            word = word[: -len(suffix)]
+            break
+    return _WORD_ALIASES.get(word, word)
 
 
 def _tokens(text: str) -> set[str]:
-    lowered = text.lower()
-    words = re.findall(r"[a-z0-9+/#]+", lowered)
+    lowered = _normalize_text(text)
+    words = re.findall(r"[a-z0-9+#]+", lowered)
     return {
         _stem(word)
         for word in words
@@ -333,22 +558,43 @@ def _clean_line(line: str) -> str:
 
 
 def _keywords_in(text: str) -> list[str]:
-    lowered = text.lower()
+    normalized = _normalize_text(text)
     found: list[str] = []
     for canonical in _SORTED_KEYWORDS:
         variants = [canonical] + SYNONYMS.get(canonical, [])
-        if any(variant in lowered for variant in variants):
+        if any(_contains_term(normalized, variant) for variant in variants):
             found.append(canonical)
     for phrase in COMMUNICATION_PHRASES:
-        if phrase in lowered:
+        if _contains_term(normalized, phrase):
             found.append(phrase)
     return sorted(set(found), key=lambda term: (-len(term), term))
+
+
+_TITLE_ACTION_RE = re.compile(
+    r"\b(?:administered|built|configured|coordinated|created|delivered|"
+    r"deployed|designed|developed|documented|ensured|handled|implemented|"
+    r"installed|led|maintained|managed|migrated|monitored|provided|"
+    r"resolved|secured|trained|troubleshot|upgraded)\b",
+    re.IGNORECASE,
+)
 
 
 def _looks_like_job_title(text: str) -> bool:
     if len(text.split()) > 7 or not _ROLE_TITLE_RE.search(text):
         return False
-    if _ACTION_RE.search(text) or _YEARS_RE.search(text):
+    if _YEARS_RE.search(text):
+        return False
+    # A title such as "IT Support Specialist" contains the word
+    # "support", which is also a common action verb. Treat a clear
+    # role-title pattern as a title before applying the action check.
+    title_pattern = re.compile(
+        r"^(?:(?:senior|junior|lead|principal|it|technical|system|network|"
+        r"desktop|service|support|second|first|2nd|1st)\s+)*"
+        r"(?:specialist|engineer|technician|analyst|administrator|"
+        r"consultant|manager|coordinator)\b",
+        re.IGNORECASE,
+    )
+    if _TITLE_ACTION_RE.search(text) and not title_pattern.match(text):
         return False
     return not re.search(
         r"\b(?:ability|experience|knowledge|required|requirements?|"
@@ -368,6 +614,8 @@ def _is_requirement_like(raw_line: str, text: str) -> bool:
     if _looks_like_job_title(text):
         return False
     if _keywords_in(text):
+        return True
+    if _LANGUAGE_LEVEL_RE.search(text) or _LEVEL_LANGUAGE_RE.search(text):
         return True
     return _REQUIREMENT_CUE_RE.search(text) is not None
 
@@ -397,6 +645,16 @@ def _infer_dimension(text: str, default: str = "responsibilities") -> str:
 
 
 def _requirement_dimension(text: str, section: str) -> str:
+    if (
+        section == "responsibilities"
+        and re.search(
+            r"\b(?:communication|collaboration|interpersonal|teamwork|"
+            r"stakeholder|customer service)\b",
+            text,
+            re.IGNORECASE,
+        )
+    ):
+        return "communication"
     if section in SECTION_DIMENSIONS:
         return SECTION_DIMENSIONS[section]
     if section == "preferred":
@@ -426,7 +684,7 @@ def _extract_requirements(job_description: str) -> list[Requirement]:
                 continue
             if section == "essential" and not _is_requirement_like(raw_line, text):
                 continue
-            key = text.lower()
+            key = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
             if key in seen:
                 continue
             seen.add(key)
@@ -435,7 +693,10 @@ def _extract_requirements(job_description: str) -> list[Requirement]:
                     text=text,
                     section=section,
                     dimension=_requirement_dimension(text, section),
-                    mandatory=section != "preferred",
+                    mandatory=(
+                        section != "preferred"
+                        and _PREFERRED_INLINE_RE.search(text) is None
+                    ),
                     keywords=_keywords_in(text),
                 )
             )
@@ -462,18 +723,38 @@ def _evidence_lines(
         line = raw_line.strip()
         if not line:
             continue
-        lowered = line.lower()
+        normalized_line = _normalize_text(line)
         keyword_hit = any(
-            any(variant in lowered for variant in _variants_for(keyword))
+            any(
+                _contains_term(normalized_line, variant)
+                for variant in _variants_for(keyword)
+            )
             for keyword in keywords
         )
         overlap = _line_overlap(requirement_tokens, line)
         threshold = 0.45 if keywords else 0.5
         if keyword_hit or overlap >= threshold:
             evidence.append(line[:EVIDENCE_LINE_LENGTH])
-            if len(evidence) >= MAX_EVIDENCE_LINES:
-                break
-    return evidence
+
+    # A bare skills list can appear before the work-experience bullet that
+    # proves the skill was used. Prefer lines with an action or outcome so
+    # the context check sees the strongest evidence, then keep the rest.
+    evidence.sort(
+        key=lambda line: 0
+        if _ACTION_RE.search(line) or _OUTCOME_RE.search(line)
+        else 1
+    )
+    return evidence[:MAX_EVIDENCE_LINES]
+
+
+def _context_evidence_lines(
+    resume_text: str, pattern: re.Pattern, limit: int = MAX_EVIDENCE_LINES
+) -> list[str]:
+    return [
+        line.strip()[:EVIDENCE_LINE_LENGTH]
+        for line in resume_text.splitlines()
+        if line.strip() and pattern.search(line.strip())
+    ][:limit]
 
 
 def _has_action_evidence(lines: list[str]) -> bool:
@@ -550,8 +831,10 @@ def _communication_signal(resume_text: str) -> float:
 
 
 def _evidence_confidence(resume_text: str, reference_year: int) -> float:
+    normalized_resume = _normalize_text(resume_text)
     skill_signal = 1.0 if any(
-        keyword in resume_text.lower() for keyword in TECH_KEYWORDS
+        _contains_term(normalized_resume, keyword)
+        for keyword in TECH_KEYWORDS
     ) else 0.0
     experience_signal = 0.0
     if _resume_years(resume_text, reference_year) is not None:
@@ -593,17 +876,53 @@ def _keyword_coverage(
     exact: list[str] = []
     partial: list[str] = []
     missing: list[str] = []
+    normalized_resume = _normalize_text(resume_lower)
     for keyword in keywords:
-        if keyword in resume_lower:
+        if _contains_term(normalized_resume, keyword):
             exact.append(keyword)
         elif any(
-            variant in resume_lower
+            _contains_term(normalized_resume, variant)
             for variant in SYNONYMS.get(keyword, [])
         ):
             partial.append(keyword)
         else:
             missing.append(keyword)
     return exact, partial, missing
+
+
+def _language_requirement(text: str) -> tuple[str, int | None] | None:
+    """Return (language, required level rank) for a language requirement."""
+    match = _LANGUAGE_LEVEL_RE.search(text)
+    if match:
+        return match.group(1).lower(), LANGUAGE_LEVELS[match.group(2).lower()]
+    match = _LEVEL_LANGUAGE_RE.search(text)
+    if match:
+        return match.group(2).lower(), LANGUAGE_LEVELS[match.group(1).lower()]
+    match = _LANGUAGE_ONLY_RE.search(text)
+    if match:
+        return match.group(1).lower(), None
+    return None
+
+
+def _resume_language_level(resume_text: str, language: str) -> int | None:
+    """Return the highest explicitly stated level for a language, if any."""
+    levels: list[int] = []
+    for match in _LANGUAGE_LEVEL_RE.finditer(resume_text):
+        if match.group(1).lower() == language:
+            levels.append(LANGUAGE_LEVELS[match.group(2).lower()])
+    for match in _LEVEL_LANGUAGE_RE.finditer(resume_text):
+        if match.group(2).lower() == language:
+            levels.append(LANGUAGE_LEVELS[match.group(1).lower()])
+    return max(levels) if levels else None
+
+
+def _has_skill_context(evidence: list[str]) -> bool:
+    return any(
+        _EXPERIENCE_CONTEXT_RE.search(line)
+        or _OUTCOME_RE.search(line)
+        or _ACTION_RE.search(line)
+        for line in evidence
+    )
 
 
 def _evaluate_requirement(
@@ -614,6 +933,37 @@ def _evaluate_requirement(
     keywords = requirement.keywords
     evidence = _evidence_lines(resume_text, keywords, requirement.text)
     lowered_resume = resume_text.lower()
+
+    language_requirement = _language_requirement(requirement.text)
+    if language_requirement is not None:
+        language, required_level = language_requirement
+        if required_level is None:
+            return (
+                UNVERIFIED,
+                evidence,
+                f"The job mentions {language.title()} but does not state a "
+                "required level.",
+            )
+        candidate_level = _resume_language_level(resume_text, language)
+        if candidate_level is None:
+            return (
+                UNVERIFIED,
+                evidence,
+                f"The candidate's {language.title()} level is not "
+                "explicitly stated.",
+            )
+        if candidate_level >= required_level:
+            return (
+                MATCHED,
+                evidence,
+                f"Stated {language.title()} level meets the requirement.",
+            )
+        return (
+            MISSING,
+            evidence,
+            f"The candidate's stated {language.title()} level is below the "
+            "level requested.",
+        )
 
     exact_terms, partial_terms, missing_keywords = _keyword_coverage(
         keywords, lowered_resume
@@ -630,6 +980,36 @@ def _evaluate_requirement(
         exact = max_overlap >= 0.6
         partial = 0.35 <= max_overlap < 0.6
         missing_keywords = []
+    elif not exact and not partial and evidence and max_overlap >= 0.45:
+        # The high-value keyword list is deliberately narrow. When the
+        # requirement text and a resume line share most of their
+        # meaningful words, that is related evidence even if none of the
+        # narrow keywords appears verbatim. Do not discard it as missing.
+        partial = True
+
+    if not exact and not partial and requirement.dimension == "communication":
+        # Communication requirements rarely name a tool. Direct evidence
+        # of supporting users, documenting, or training is relevant
+        # evidence, but it is only partial unless the wording matches.
+        context = _context_evidence_lines(resume_text, _COMMUNICATION_RE)
+        if context:
+            evidence = context
+            partial = True
+
+    if (
+        not exact
+        and not partial
+        and requirement.dimension == "qualifications"
+        and not keywords
+    ):
+        # "Completed IT training or comparable qualification" has no
+        # technology keyword. A stated degree or certification is
+        # comparable evidence; it is not an invented claim.
+        context = _context_evidence_lines(resume_text, _QUALIFICATION_RE)
+        if context:
+            evidence = context
+            exact = True
+            missing_keywords = []
 
     if not exact and not partial:
         return MISSING, [], "No supporting evidence found in the resume."
@@ -653,7 +1033,14 @@ def _evaluate_requirement(
                 ),
             )
         if exact:
-            return MATCHED, evidence, "All required skills appear in the resume."
+            if action or _has_skill_context(evidence):
+                return MATCHED, evidence, "All required skills appear with work context."
+            return (
+                UNVERIFIED,
+                evidence,
+                "The skill terms appear, but the resume does not show work "
+                "context for them.",
+            )
         return MISSING, evidence, "No required skill evidence found."
 
     if requirement.dimension == "experience":
@@ -826,14 +1213,16 @@ SECTION_PRIORITY = {
 def _keyword_term_status(
     requirement: Requirement, keyword: str, resume_lower: str
 ) -> str:
-    if keyword in resume_lower:
+    normalized_resume = _normalize_text(resume_lower)
+    if _contains_term(normalized_resume, keyword):
+        # The keyword is explicitly present. A requirement can still be
+        # unverified when the resume lists the skill without work context,
+        # but it must never be reported as missing.
         if requirement.status == UNVERIFIED:
             return UNVERIFIED
-        if requirement.status == MISSING:
-            return MISSING
         return MATCHED
     if any(
-        variant in resume_lower
+        _contains_term(normalized_resume, variant)
         for variant in SYNONYMS.get(keyword, [])
     ):
         return PARTIAL

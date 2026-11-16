@@ -181,6 +181,14 @@ UNSUPPORTED_CLAIM_TERMS = [
     "escalated tickets",
     "second-line support",
     "2nd line support",
+    "collaborate with senior",
+    "collaborated with senior",
+    "collaborate closely",
+    "collaborated closely",
+    "joint problem-solving",
+    "team meetings",
+    "user satisfaction",
+    "enhance team knowledge",
 ]
 
 OUTCOME_GROUPS = {
@@ -190,8 +198,9 @@ OUTCOME_GROUPS = {
     ],
     "improved": [
         "improve", "improved", "improving", "improvement",
-        "enhanced", "enhancing", "accelerated", "accelerating",
-        "faster", "streamlined", "streamlining",
+        "enhance", "enhanced", "enhancing", "accelerated",
+        "accelerating", "faster", "streamline", "streamlined",
+        "streamlining",
     ],
     "downtime": ["downtime"],
     "efficiency": ["efficiency", "efficient", "efficiently"],
@@ -299,6 +308,110 @@ def _check_unsupported_outcomes(
             )
 
 
+_PURPOSE_OUTCOME_RE = re.compile(
+    r"(?:\s*[,;]\s*|\s+)to\s+(?:improve|reduce|increase|save|cut|"
+    r"decrease|boost|optimize|optimise|streamline|enhance|accelerate)\b"
+    r"[^.!?\n]*",
+    flags=re.IGNORECASE,
+)
+
+_OUTCOME_ADVERB_RE = re.compile(
+    r"\s+efficiently\b", flags=re.IGNORECASE
+)
+
+_TRAILING_COMPARATIVE_RE = re.compile(
+    r"\s+(?:more|less|better|most)\b(?=[.!?]|$)", flags=re.IGNORECASE
+)
+
+_OUTCOME_RELATIVE_CLAUSE_RE = re.compile(
+    r",?\s+(?:which|that)\s+(?:has\s+|have\s+|had\s+)?"
+    r"(?:helped|helps|help|supported|supports|support|allowed|allows|"
+    r"allow|enabled|enables|enable|reduced|reduces|reduce|improved|"
+    r"improves|improve|increased|increases|increase|saved|saves|save|"
+    r"cut|cuts|boosted|boosts|boost|streamlined|streamlines|"
+    r"streamline|enhanced|enhances|enhance)\b[^.!?\n]*",
+    flags=re.IGNORECASE,
+)
+
+_OUTCOME_PARTICIPLE_CLAUSE_RE = re.compile(
+    r",\s+(?:helping|supporting|enabling|allowing|reducing|improving|"
+    r"increasing|saving|cutting|boosting|streamlining|enhancing)\b"
+    r"[^.!?\n]*",
+    flags=re.IGNORECASE,
+)
+
+_DANGLING_WORDS = {
+    "a", "an", "and", "as", "at", "by", "for", "from", "in", "of",
+    "on", "or", "that", "the", "to", "which", "with", "more", "less",
+    "better", "most",
+}
+
+
+def _looks_incomplete(line: str) -> bool:
+    words = re.findall(r"[A-Za-z]+", line)
+    return bool(words) and words[-1].lower() in _DANGLING_WORDS
+
+
+def _line_has_unsupported_outcome(line: str, resume_source: str) -> bool:
+    for variants in OUTCOME_GROUPS.values():
+        generated = any(_has_term(line, variant) for variant in variants)
+        supported = any(_has_term(resume_source, variant) for variant in variants)
+        if generated and not supported:
+            return True
+    return False
+
+
+def repair_unsupported_outcomes(
+    text: str, resume_source: str, *, drop_unrepairable: bool = True
+) -> tuple[str, bool]:
+    """Remove unsupported outcome clauses that a revision pass left behind.
+
+    This is a conservative deterministic fallback, used only after the
+    model has had a chance to revise. A trailing purpose clause such as
+    "to improve support efficiency" is removed when the source resume
+    does not state that outcome. If the unsupported outcome is the main
+    claim of a line, the line is dropped rather than rewritten.
+    Returns the repaired text and whether anything changed.
+    """
+    if not text:
+        return text, False
+
+    trailing_newline = text.endswith("\n")
+    kept: list[str] = []
+    changed = False
+    for line in text.splitlines():
+        cleaned_line = _TRAILING_COMPARATIVE_RE.sub("", line)
+        if cleaned_line != line:
+            line = cleaned_line.rstrip(" ,;")
+            changed = True
+        if not _line_has_unsupported_outcome(line, resume_source):
+            kept.append(line)
+            continue
+        candidate = _OUTCOME_ADVERB_RE.sub("", line).rstrip(" ,;")
+        candidate = _TRAILING_COMPARATIVE_RE.sub("", candidate).rstrip(" ,;")
+        candidate = _PURPOSE_OUTCOME_RE.sub("", candidate).rstrip(" ,;")
+        candidate = _OUTCOME_RELATIVE_CLAUSE_RE.sub("", candidate).rstrip(" ,;")
+        candidate = _OUTCOME_PARTICIPLE_CLAUSE_RE.sub("", candidate).rstrip(" ,;")
+        if (
+            candidate != line
+            and not _line_has_unsupported_outcome(candidate, resume_source)
+            and not _looks_incomplete(candidate)
+        ):
+            kept.append(candidate)
+            changed = True
+        elif drop_unrepairable:
+            changed = True
+        else:
+            # Cover letters read as connected prose. Dropping a line can
+            # leave an empty letter, so leave the claim for the model to
+            # revise and surface the issue to the user if it remains.
+            kept.append(line)
+    repaired = "\n".join(kept)
+    if trailing_newline and repaired:
+        repaired += "\n"
+    return repaired, changed
+
+
 def _check_relative_time_claims(
     doc_name: str,
     text: str,
@@ -338,6 +451,182 @@ def _check_unsupported_metrics(
                     ),
                 )
             )
+
+
+MARKDOWN_ARTIFACT_PATTERN = re.compile(
+    r"\*\*|__|^#{1,6}\s|^\s*(?:---+|___+)\s*$",
+    flags=re.MULTILINE,
+)
+COVER_LETTER_BULLET_PATTERN = re.compile(
+    r"^\s*[-*•]\s+", flags=re.MULTILINE
+)
+
+RESUME_SECTION_HEADINGS = {
+    "summary",
+    "professional summary",
+    "profile",
+    "skills",
+    "technical skills",
+    "core competencies",
+    "experience",
+    "work experience",
+    "professional experience",
+    "projects",
+    "education",
+    "certifications",
+    "certificates",
+    "languages",
+}
+
+
+MIN_COVER_LETTER_WORDS = 280
+MAX_COVER_LETTER_WORDS = 650
+_GREETING_RE = re.compile(
+    r"^\s*(?:Dear\b|Hello\b|Hallo\b|Sehr geehrte)",
+    flags=re.IGNORECASE | re.MULTILINE,
+)
+_CLOSING_RE = re.compile(
+    r"^\s*(?:Sincerely|Kind regards|Best regards|Yours sincerely|"
+    r"Yours faithfully|Mit freundlichen Gr(?:ü|ue)(?:ß|ss)en|"
+    r"Freundliche Gr(?:ü|ue)(?:ß|ss)e)\b",
+    flags=re.IGNORECASE | re.MULTILINE,
+)
+_EMPLOYER_RE = re.compile(
+    r"\b(?:[A-Z][\w&.\-]+(?:\s+[A-Z][\w&.\-]+){0,3})\s+"
+    r"(?:GmbH|AG|Inc\.?|Ltd\.?|LLC|SE|KG|UG|Corp\.?)\b"
+)
+_DATE_RANGE_RE = re.compile(
+    r"\b(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:(?:19|20)\d{2}|present|current)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _normalize_entity(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _check_cover_letter_structure(
+    text: str, issues: list
+) -> None:
+    words = re.findall(r"[A-Za-zÀ-ÿ0-9']+", text)
+    if len(words) < MIN_COVER_LETTER_WORDS:
+        issues.append(
+            WritingIssue(
+                code="cover_letter_too_short",
+                message=(
+                    f"Cover letter: only {len(words)} words; write a "
+                    "detailed letter of roughly 350 to 450 words using "
+                    "verified evidence."
+                ),
+            )
+        )
+    elif len(words) > MAX_COVER_LETTER_WORDS:
+        issues.append(
+            WritingIssue(
+                code="cover_letter_too_long",
+                message=(
+                    f"Cover letter: {len(words)} words is excessively long; "
+                    "select the strongest evidence and tighten the letter."
+                ),
+            )
+        )
+    if not _GREETING_RE.search(text):
+        issues.append(
+            WritingIssue(
+                code="missing_greeting",
+                message=(
+                    "Cover letter: no professional greeting found; address "
+                    "the hiring team or recruiter."
+                ),
+            )
+        )
+    if not _CLOSING_RE.search(text):
+        issues.append(
+            WritingIssue(
+                code="missing_closing",
+                message=(
+                    "Cover letter: no professional closing found; end with "
+                    "a conventional sign-off and the applicant's name."
+                ),
+            )
+        )
+
+
+_LEADING_SENTENCE_WORDS_RE = re.compile(
+    r"^(?:At|The|This|That|With|For|From|In|On|By|And|But)\s+",
+    flags=re.IGNORECASE,
+)
+
+
+def _clean_employer_name(entity: str) -> str:
+    return _LEADING_SENTENCE_WORDS_RE.sub("", entity).strip()
+
+
+def _check_document_consistency(
+    text: str,
+    *,
+    resume_source: str,
+    tailored_resume: str,
+    job_description: str,
+    issues: list,
+) -> None:
+    source_text = f"{resume_source}\n{tailored_resume}\n{job_description}"
+    normalized_source = _normalize_entity(source_text)
+    for match in sorted(set(_EMPLOYER_RE.findall(text))):
+        entity = _clean_employer_name(match)
+        if _normalize_entity(entity) not in normalized_source:
+            issues.append(
+                WritingIssue(
+                    code="invented_employer",
+                    message=(
+                        f"Cover letter: employer '{entity}' does not appear "
+                        "in the source resume, tailored resume, or job "
+                        "description; remove or correct it."
+                    ),
+                )
+            )
+    source_dates = {
+        _normalize_entity(match.group(0))
+        for match in _DATE_RANGE_RE.finditer(source_text)
+    }
+    for match in sorted(set(_DATE_RANGE_RE.findall(text))):
+        if _normalize_entity(match) not in source_dates:
+            issues.append(
+                WritingIssue(
+                    code="inconsistent_date",
+                    message=(
+                        f"Cover letter: date range '{match}' does not match "
+                        "the source resume or tailored resume."
+                    ),
+                )
+            )
+
+
+def _check_formatting_artifacts(
+    doc_name: str, text: str, issues: list
+) -> None:
+    match = MARKDOWN_ARTIFACT_PATTERN.search(text)
+    if match:
+        issues.append(
+            WritingIssue(
+                code="markdown_artifact",
+                message=(
+                    f"{doc_name}: Markdown or decorative formatting "
+                    f"'{match.group(0).strip()}' found; use plain professional "
+                    "document formatting."
+                ),
+            )
+        )
+    if doc_name == "Cover letter" and COVER_LETTER_BULLET_PATTERN.search(text):
+        issues.append(
+            WritingIssue(
+                code="cover_letter_bullets",
+                message=(
+                    "Cover letter: bullet-list formatting found; use "
+                    "professional paragraphs instead."
+                ),
+            )
+        )
 
 
 PLACEHOLDER_PATTERN = re.compile(
@@ -412,6 +701,35 @@ def _check_name_preserved(
         )
 
 
+def _is_resume_heading(line: str) -> bool:
+    normalized = line.strip().rstrip(":").strip().lower()
+    return normalized in RESUME_SECTION_HEADINGS
+
+
+def _check_empty_resume_sections(
+    doc_name: str, text: str, issues: list
+) -> None:
+    if doc_name != "Tailored resume":
+        return
+    lines = [line.strip() for line in text.splitlines()]
+    for index, line in enumerate(lines):
+        if not line or not _is_resume_heading(line):
+            continue
+        following = index + 1
+        while following < len(lines) and not lines[following]:
+            following += 1
+        if following >= len(lines) or _is_resume_heading(lines[following]):
+            issues.append(
+                WritingIssue(
+                    code="empty_section",
+                    message=(
+                        f"Tailored resume: section '{line.rstrip(':')}' is "
+                        "empty; add verified content or remove the heading."
+                    ),
+                )
+            )
+
+
 @dataclass
 class WritingIssue:
     code: str
@@ -428,6 +746,8 @@ def review_writing(
     resume_source: str,
     tailored_resume: str | None,
     cover_letter: str | None,
+    *,
+    job_description: str = "",
 ) -> WritingReview:
     """Run the deterministic writing-quality checks.
 
@@ -444,6 +764,7 @@ def review_writing(
             continue
         _check_generic_phrases(doc_name, text, issues)
         _check_em_dashes(doc_name, text, issues)
+        _check_formatting_artifacts(doc_name, text, issues)
         _check_placeholders(doc_name, text, issues)
         _check_unsupported_claims(doc_name, text, resume_source, issues)
         _check_unsupported_sections(doc_name, text, resume_source, issues)
@@ -451,6 +772,16 @@ def review_writing(
         _check_relative_time_claims(doc_name, text, resume_source, issues)
         _check_unsupported_metrics(doc_name, text, resume_source, issues)
         _check_repeated_openers(doc_name, text, issues)
+        _check_empty_resume_sections(doc_name, text, issues)
+        if doc_name == "Cover letter":
+            _check_cover_letter_structure(text, issues)
+            _check_document_consistency(
+                text,
+                resume_source=resume_source,
+                tailored_resume=tailored_resume or "",
+                job_description=job_description,
+                issues=issues,
+            )
 
     if tailored_resume or cover_letter:
         _check_name_preserved(

@@ -1,6 +1,9 @@
 """Tests for the deterministic writing-quality review stage."""
 
-from app.domains.resume_ats.writing_review import review_writing
+from app.domains.resume_ats.writing_review import (
+    repair_unsupported_outcomes,
+    review_writing,
+)
 
 SOURCE = (
     "Jane Doe\n"
@@ -18,8 +21,40 @@ CLEAN_TAILORED = (
 
 CLEAN_COVER = (
     "Dear Hiring Manager,\n"
-    "I have supported 400 users across Active Directory and Microsoft 365.\n"
-    "Recently I automated user provisioning with PowerShell.\n"
+    "I am interested in this support role because it centres on the "
+    "systems I work with every day. I have supported 400 users across "
+    "Active Directory and Microsoft 365, and I enjoy helping people get "
+    "back to work quickly.\n"
+    "\n"
+    "In my current role I administer user accounts, support Microsoft 365 "
+    "services, and troubleshoot access problems. I document recurring "
+    "issues so the team can resolve them consistently. Recently I "
+    "automated user provisioning with PowerShell, which made onboarding "
+    "more consistent and gave me more time to support users directly. I "
+    "also keep clear notes on each recurring problem so colleagues can "
+    "follow the same steps.\n"
+    "\n"
+    "I work through problems in a structured way. I check the account, the "
+    "device, and the network, then document what solved the issue so the "
+    "next person can follow the same steps. I ask clear questions when a "
+    "user describes a problem, and I explain the fix in plain language. I "
+    "am comfortable working with a ticket queue and with colleagues who "
+    "have deeper specialist knowledge. I also make time to learn new tools "
+    "through documentation and practice, and I ask for help when a problem "
+    "is outside my experience. I keep users updated while I work and "
+    "confirm that the fix has actually solved their problem before I close "
+    "a ticket. I would bring the same careful approach to this role and to "
+    "your users.\n"
+    "\n"
+    "What I would bring to this position is a practical support mindset. I "
+    "ask clear questions, check the account and the device, and explain "
+    "the outcome without jargon. I also keep learning: when a tool is new "
+    "to me, I read the documentation, test it in a lab, and ask for help "
+    "when I need it.\n"
+    "\n"
+    "I would welcome the opportunity to discuss how my experience with "
+    "Active Directory, Microsoft 365, and user support fits the team.\n"
+    "\n"
     "Sincerely,\n"
     "Jane Doe\n"
 )
@@ -268,3 +303,178 @@ def test_empty_documents_produce_no_issues():
 
     assert review.passed is True
     assert review.issues == []
+
+
+def test_markdown_artifacts_are_flagged():
+    review = review_writing(
+        "Jane Doe",
+        "Jane Doe\n**Skills**\n- Active Directory",
+        None,
+    )
+
+    assert any(issue.code == "markdown_artifact" for issue in review.issues)
+
+
+def test_cover_letter_bullets_are_flagged():
+    review = review_writing(
+        "Jane Doe",
+        None,
+        "Dear Hiring Manager,\n- Active Directory experience\n- VPN support",
+    )
+
+    assert any(issue.code == "cover_letter_bullets" for issue in review.issues)
+
+def test_repair_removes_unsupported_purpose_clause_without_dropping_fact():
+    text = (
+        "Jane Doe\n"
+        "Assisted users with technical problems and documented recurring "
+        "issues and solutions to improve support efficiency.\n"
+    )
+
+    repaired, changed = repair_unsupported_outcomes(text, SOURCE)
+
+    assert changed is True
+    assert "improve support efficiency" not in repaired
+    assert "documented recurring issues and solutions" in repaired.lower()
+    assert review_writing(SOURCE, repaired, None).passed is True
+
+
+def test_repair_keeps_outcomes_that_the_source_supports():
+    source = (
+        "Jane Doe\n"
+        "Reduced downtime by 20% and improved response times.\n"
+    )
+    text = "Jane Doe\nReduced downtime by 20% and improved response times.\n"
+
+    repaired, changed = repair_unsupported_outcomes(text, source)
+
+    assert changed is False
+    assert repaired == text
+
+def test_empty_resume_section_is_flagged():
+    tailored = (
+        "Jane Doe\n"
+        "Professional Summary\n"
+        "\n"
+        "Skills\n"
+        "- Active Directory\n"
+    )
+
+    review = review_writing(SOURCE, tailored, None)
+
+    assert any(
+        issue.code == "empty_section" and "Professional Summary" in issue.message
+        for issue in review.issues
+    )
+
+
+def test_invented_collaboration_and_satisfaction_claims_are_flagged():
+    text = (
+        "Jane Doe\n"
+        "Collaborated with senior administrators in joint problem-solving "
+        "sessions and team meetings to improve user satisfaction.\n"
+    )
+
+    review = review_writing(SOURCE, text, None)
+    codes = {issue.code for issue in review.issues}
+
+    assert "unsupported_claim" in codes
+    assert any(
+        "collaborated with senior" in issue.message
+        for issue in review.issues
+        if issue.code == "unsupported_claim"
+    )
+
+def test_repair_removes_unsupported_relative_clause_without_dropping_fact():
+    text = (
+        "Jane Doe\n"
+        "I use PowerShell and Python scripting to automate routine tasks, "
+        "which helps reduce manual effort and supports more efficient "
+        "troubleshooting.\n"
+    )
+
+    repaired, changed = repair_unsupported_outcomes(text, SOURCE)
+
+    assert changed is True
+    assert "which helps reduce" not in repaired
+    assert "I use PowerShell and Python scripting to automate routine tasks." in repaired
+    assert review_writing(SOURCE, repaired, None).passed is True
+
+def test_repair_does_not_leave_a_dangling_sentence_fragment():
+    text = (
+        "Jane Doe\n"
+        "These projects reflect my interest in improving efficiency.\n"
+    )
+
+    repaired, changed = repair_unsupported_outcomes(
+        text, SOURCE, drop_unrepairable=False
+    )
+
+    # The unsupported outcome remains for the model/user to address, but
+    # the repair must not produce a broken sentence such as "interest in."
+    assert "interest in." not in repaired
+    assert repaired == text
+    assert changed is False
+
+def test_repair_removes_which_has_helped_outcome_clause():
+    text = (
+        "Jane Doe\n"
+        "I use PowerShell to automate small tasks, which has helped me "
+        "improve efficiency and deepen my technical skills.\n"
+    )
+
+    repaired, changed = repair_unsupported_outcomes(
+        text, SOURCE, drop_unrepairable=False
+    )
+
+    assert changed is True
+    assert "improve efficiency" not in repaired
+    assert "which has helped" not in repaired
+    assert repaired.strip().endswith("I use PowerShell to automate small tasks.")
+
+def test_repair_removes_unsupported_efficiency_adverb():
+    text = (
+        "Jane Doe\n"
+        "I support users by resolving incidents efficiently.\n"
+    )
+
+    repaired, changed = repair_unsupported_outcomes(
+        text, SOURCE, drop_unrepairable=False
+    )
+
+    assert changed is True
+    assert "efficiently" not in repaired
+    assert "resolving incidents." in repaired
+    assert review_writing(SOURCE, repaired, None).passed is True
+
+
+def test_sentence_start_at_employer_is_not_treated_as_invented():
+    source = (
+        "Jane Doe\n"
+        "IT Support Engineer at Example GmbH (2021 - 2024)\n"
+        "Supported Active Directory and Microsoft 365.\n"
+    )
+    cover = (
+        "Dear Hiring Manager,\n"
+        "At Example GmbH, I supported Active Directory and Microsoft 365.\n"
+        "Sincerely,\nJane Doe\n"
+    )
+
+    review = review_writing(source, None, cover)
+
+    assert all(issue.code != "invented_employer" for issue in review.issues)
+
+def test_repair_removes_trailing_comparative_left_by_adverb_removal():
+    text = (
+        "Jane Doe\n"
+        "I maintain documentation to help users resolve issues more efficiently.\n"
+    )
+
+    repaired, changed = repair_unsupported_outcomes(
+        text, SOURCE, drop_unrepairable=False
+    )
+
+    assert changed is True
+    assert "more" not in repaired
+    assert "resolve issues." in repaired
+    assert review_writing(SOURCE, repaired, None).passed is True
